@@ -10,8 +10,8 @@
   "dependencies": {
     "react-native-web": "*",
     "react-native-gesture-handler": "*",
-"react-dom": "*",
-"@expo/metro-runtime": "*",
+    "react-dom": "19.2.0",
+    "@expo/metro-runtime": "*",
     "expo": "~55.0.32",
     "expo-status-bar": "~55.0.6",
     "react": "19.2.0",
