@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "react-native-web": "*",
+    "react-native-gesture-handler": "*",
 "react-dom": "*",
 "@expo/metro-runtime": "*",
     "expo": "~55.0.32",
