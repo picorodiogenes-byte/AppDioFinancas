@@ -9,14 +9,15 @@ function MainApp() {
   const [abaAtual, setAbaAtual] = useState('dashboard'); 
   
   const dataHoje = new Date();
-  const mesAtualHoje = `${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${dataHoje.getFullYear()}`;
+  const anoCorrente = dataHoje.getFullYear();
+  const mesAtualHoje = `${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
   
   const [mesSelecionado, setMesSelecionado] = useState(mesAtualHoje);
   const [menuAberto, setMenuAberto] = useState(false);
   const [temNotificacao, setTemNotificacao] = useState(false);
   const [menuAdicionarVisivel, setMenuAdicionarVisivel] = useState(false);
   const [modalMesVisivel, setModalMesVisivel] = useState(false);
-  const [anoTemp, setAnoTemp] = useState(dataHoje.getFullYear());
+  const [anoTemp, setAnoTemp] = useState(anoCorrente);
 
   const [refreshing, setRefreshing] = useState(false);
   const [categoriasExpandidas, setCategoriasExpandidas] = useState({});
@@ -32,7 +33,7 @@ function MainApp() {
   const [conteudoCsvInput, setConteudoCsvInput] = useState('');
   const [transacoesPreview, setTransacoesPreview] = useState([]);
 
-  const [anoVisaoAnual, setAnoVisaoAnual] = useState(dataHoje.getFullYear());
+  const [anoVisaoAnual, setAnoVisaoAnual] = useState(anoCorrente);
 
   const [metas, setMetas] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -98,43 +99,42 @@ function MainApp() {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
   };
 
-  // Leitor Inteligente Ajustado: Data da Compra, Parcelas, Descrição, Valor Total, Categoria(opcional)
+  // Leitor Inteligente Ajustado para o formato exato: Data; Descrição; Parcela (01/02); Valor Parcela; Valor Total
   const processarTextoCsv = (texto) => {
     const linhas = texto.split('\n');
     let listaProcessada = [];
 
     linhas.forEach((linha, idx) => {
-      if (!linha.trim() || idx === 0) return; // Ignora cabeçalho ou linhas vazias
-      const colunas = linha.split(/,|\t;/); 
+      if (!linha.trim()) return;
+      const colunas = linha.split(';'); 
       if (colunas.length >= 4) {
-        const dataCompraStr = colunas[0]?.trim() || `${dataHoje.getDate().toString().padStart(2, '0')}/${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${dataHoje.getFullYear()}`;
-        const qtdParcelasStr = parseInt(colunas[1]?.trim(), 10) || 1;
-        const descStr = colunas[2]?.trim() || 'Importado CSV';
-        let valorTotalNum = parseFloat((colunas[3]?.trim() || '0').replace('R$', '').replace(',', '.')) || 0;
-        const categoriaInformada = colunas[4]?.trim();
+        const diaMes = colunas[0]?.trim() || '01/01';
+        const dataCompraStr = `${diaMes}/${anoCorrente}`;
+        const descStr = colunas[1]?.trim() || 'Importado';
+        const parcelaInfoStr = colunas[2]?.trim() || '01/01'; // ex: 01/02
+        
+        let valorUnitarioNum = parseFloat((colunas[3]?.trim() || '0').replace('R$', '').replace(/\./g, '').replace(',', '.')) || 0;
 
-        let tipoTransacao = valorTotalNum < 0 ? 'saida' : 'entrada';
-        valorTotalNum = Math.abs(valorTotalNum);
+        // Separar parcela atual e total de parcelas (ex: 01/02 -> atual = 1, total = 2)
+        const partesParcela = parcelaInfoStr.split('/');
+        const parcelaAtual = parseInt(partesParcela[0], 10) || 1;
+        const totalParcelas = parseInt(partesParcela[1], 10) || 1;
 
-        // Definindo Categoria Automática se não informada
-        let catSugerida = categoriaInformada || 'Outros';
-        if (!categoriaInformada) {
-          const descLower = descStr.toLowerCase();
-          if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
-          else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria')) catSugerida = 'Alimentação';
-          else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
-          else if (descLower.includes('salario') || descLower.includes('pix recebido') || descLower.includes('ted')) { catSugerida = 'Renda'; tipoTransacao = 'entrada'; }
-          else if (tipoTransacao === 'saida') catSugerida = 'Cartão de Crédito';
-        }
+        // Inteligência de Categoria Automática
+        let catSugerida = 'Cartão de Crédito';
+        const descLower = descStr.toLowerCase();
+        if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
+        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude')) catSugerida = 'Alimentação';
+        else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
+        else if (descLower.includes('salario') || descLower.includes('pix recebido')) catSugerida = 'Renda';
 
-        // Lógica de Parcelas vs À Vista
-        if (qtdParcelasStr <= 1 || tipoTransacao === 'entrada') {
-          // Parcela única (1) ou Entrada -> Direto à vista
+        if (totalParcelas <= 1) {
+          // À vista
           listaProcessada.push({
             id: `${Date.now()}_${idx}`,
             descricao: descStr,
-            valor: valorTotalNum,
-            tipo: tipoTransacao,
+            valor: valorUnitarioNum,
+            tipo: 'saida',
             modalidade: 'a_vista',
             categoria: catSugerida,
             dataCompra: dataCompraStr,
@@ -142,19 +142,26 @@ function MainApp() {
             fixado: false
           });
         } else {
-          // Compra Parcelada Inteligente
-          const valorParcela = parseFloat((valorTotalNum / qtdParcelasStr).toFixed(2));
-          for (let p = 0; p < qtdParcelasStr; p++) {
+          // Parcelado: Ajusta a data retroativa da compra para que a parcela atual caia no mês certo
+          const mesesAVoltar = parcelaAtual - 1;
+          const partesData = dataCompraStr.split('/');
+          let dataRealCompra = dataCompraStr;
+          if (partesData.length === 3) {
+            let dCompra = new Date(parseInt(partesData[2], 10), parseInt(partesData[1], 10) - 1 - mesesAVoltar, parseInt(partesData[0], 10));
+            dataRealCompra = `${dCompra.getDate().toString().padStart(2, '0')}/${(dCompra.getMonth() + 1).toString().padStart(2, '0')}/${dCompra.getFullYear()}`;
+          }
+
+          for (let p = 0; p < totalParcelas; p++) {
             listaProcessada.push({
               id: `${Date.now()}_${idx}_${p}`,
-              descricao: `${descStr} [${p + 1}/${qtdParcelasStr}]`,
-              valor: valorParcela,
+              descricao: `${descStr} [${p + 1}/${totalParcelas}]`,
+              valor: valorUnitarioNum,
               tipo: 'saida',
               modalidade: 'parcelada',
-              parcelasInfo: `${p + 1}/${qtdParcelasStr}`,
+              parcelasInfo: `${p + 1}/${totalParcelas}`,
               categoria: catSugerida,
-              dataCompra: dataCompraStr,
-              dataVencimento: somarMesesData(dataCompraStr, p),
+              dataCompra: dataRealCompra,
+              dataVencimento: somarMesesData(dataRealCompra, p),
               fixado: false
             });
           }
@@ -215,7 +222,7 @@ function MainApp() {
   const [calendarioVisivel, setCalendarioVisivel] = useState(false);
   const [campoDataAtivo, setCampoDataAtivo] = useState('compra'); 
   const [calMes, setCalMes] = useState(dataHoje.getMonth() + 1);
-  const [calAno, setCalAno] = useState(dataHoje.getFullYear());
+  const [calAno, setCalAno] = useState(anoCorrente);
 
   const nomesMeses = { '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril', '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto', '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro' };
   const mesesAbreviados = [{ num: 1, nome: 'Jan' }, { num: 2, nome: 'Fev' }, { num: 3, nome: 'Mar' }, { num: 4, nome: 'Abr' }, { num: 5, nome: 'Mai' }, { num: 6, nome: 'Jun' }, { num: 7, nome: 'Jul' }, { num: 8, nome: 'Ago' }, { num: 9, nome: 'Set' }, { num: 10, nome: 'Out' }, { num: 11, nome: 'Nov' }, { num: 12, nome: 'Dez' }];
@@ -309,7 +316,7 @@ function MainApp() {
 
   const escolherTipoTransacao = (tipo) => {
     const hoje = new Date();
-    const dataHojeFormatada = `${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}`;
+    const dataHojeFormatada = `${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
     setNovoTipo(tipo); setNovaCategoriaForm(tipo === 'entrada' ? 'Renda' : 'Cartão de Crédito'); setNovaDataCompra(dataHojeFormatada); setNovaDataVencimento(dataHojeFormatada); 
     setMenuAdicionarVisivel(false); setTimeout(() => { setModalVisivel(true); }, 150);
   };
@@ -481,7 +488,7 @@ function MainApp() {
 
     if (origemDeposito === 'carteira') {
       const hoje = new Date();
-      const dataHojeFormatada = `${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}`;
+      const dataHojeFormatada = `${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
       
       const novaTransacao = {
         id: Date.now().toString() + '_dep',
@@ -778,44 +785,43 @@ function MainApp() {
           <TouchableOpacity style={styles.navItem} onPress={() => setAbaAtual('perfil')}><Feather name="user" size={24} color={abaAtual === 'perfil' ? '#3B82F6' : '#94A3B8'} /><Text style={[styles.navText, abaAtual === 'perfil' && styles.navTextAtivo]}>Perfil</Text></TouchableOpacity>
         </View>
 
-        {/* Modal de Importação CSV Inteligente com as novas colunas */}
+        {/* Modal do Importador CSV Inteligente */}
         <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}>
             <View style={[styles.modalConteudo, { maxHeight: '90%' }]}>
               <View style={styles.modalCabecalho}>
-                <Text style={styles.modalTitulo}>Importar Extrato CSV (Inteligente)</Text>
+                <Text style={styles.modalTitulo}>Importador Inteligente de Extrato</Text>
                 <TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity>
               </View>
-              <Text style={styles.label}>Padrão esperado por linha:</Text>
-              <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 8, fontStyle: 'italic' }}>
-                data_da_compra, parcelas, descrição, valor_total, [categoria opcional]{"\n"}
-                Ex: 10/11/2026, 1, Supermercado, -150.00, Alimentação{"\n"}
-                Ex: 15/11/2026, 5, Notebook Novo, -2500.00
+              <Text style={styles.label}>Cole o formato do seu extrato (separado por ponto e vírgula):</Text>
+              <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 8, fontStyle: 'italic' }}>
+                Formato: [Data Compra] ; [Descrição] ; [Parcela ex: 01/02] ; [Valor Parcela] ; [Valor Total]{"\n"}
+                Ex: 23/10; RD SAUDE ONLINE; 01/02; R$ 64,48; R$ 128,96
               </Text>
 
               <TextInput 
-                style={[styles.input, { height: 100, textAlignVertical: 'top' }]} 
+                style={[styles.input, { height: 120, textAlignVertical: 'top', fontSize: 13 }]} 
                 multiline={true} 
-                placeholder="Cole o seu CSV aqui..." 
+                placeholder="Cole as linhas aqui..." 
                 value={conteudoCsvInput} 
                 onChangeText={setConteudoCsvInput} 
               />
               <TouchableOpacity style={[styles.botaoSalvar, { backgroundColor: '#10B981', marginTop: 10 }]} onPress={() => processarTextoCsv(conteudoCsvInput)}>
-                <Text style={styles.textoBotaoSalvar}>Analisar e Processar Parcelas</Text>
+                <Text style={styles.textoBotaoSalvar}>Processar e Organizar Parcelas</Text>
               </TouchableOpacity>
 
               {transacoesPreview.length > 0 && (
                 <View style={{ marginTop: 15, flex: 1 }}>
-                  <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} registos gerados):</Text>
+                  <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} itens gerados):</Text>
                   <ScrollView style={{ maxHeight: 180, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 10 }}>
                     {transacoesPreview.map((item, i) => (
                       <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text>
-                          <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento} • {item.categoria} • {item.modalidade}</Text>
+                          <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Data/Venc: {item.dataCompra} • {item.categoria} • {item.modalidade}</Text>
                         </View>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>
-                          {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#B91C1C' }}>
+                          - R$ {item.valor.toFixed(2)}
                         </Text>
                       </View>
                     ))}
