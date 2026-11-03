@@ -99,7 +99,7 @@ function MainApp() {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
   };
 
-  // Leitor Inteligente Ajustado para o formato exato: Data; Descrição; Parcela (01/02); Valor Parcela; Valor Total
+  // Leitor Inteligente para formato exato: Data; Descrição; Parcela (01/02); Valor Parcela; Valor Total
   const processarTextoCsv = (texto) => {
     const linhas = texto.split('\n');
     let listaProcessada = [];
@@ -111,25 +111,22 @@ function MainApp() {
         const diaMes = colunas[0]?.trim() || '01/01';
         const dataCompraStr = `${diaMes}/${anoCorrente}`;
         const descStr = colunas[1]?.trim() || 'Importado';
-        const parcelaInfoStr = colunas[2]?.trim() || '01/01'; // ex: 01/02
+        const parcelaInfoStr = colunas[2]?.trim() || '01/01'; 
         
         let valorUnitarioNum = parseFloat((colunas[3]?.trim() || '0').replace('R$', '').replace(/\./g, '').replace(',', '.')) || 0;
 
-        // Separar parcela atual e total de parcelas (ex: 01/02 -> atual = 1, total = 2)
         const partesParcela = parcelaInfoStr.split('/');
         const parcelaAtual = parseInt(partesParcela[0], 10) || 1;
         const totalParcelas = parseInt(partesParcela[1], 10) || 1;
 
-        // Inteligência de Categoria Automática
         let catSugerida = 'Cartão de Crédito';
         const descLower = descStr.toLowerCase();
         if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
-        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude')) catSugerida = 'Alimentação';
+        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude') || descLower.includes('saude online')) catSugerida = 'Alimentação';
         else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
         else if (descLower.includes('salario') || descLower.includes('pix recebido')) catSugerida = 'Renda';
 
         if (totalParcelas <= 1) {
-          // À vista
           listaProcessada.push({
             id: `${Date.now()}_${idx}`,
             descricao: descStr,
@@ -142,7 +139,6 @@ function MainApp() {
             fixado: false
           });
         } else {
-          // Parcelado: Ajusta a data retroativa da compra para que a parcela atual caia no mês certo
           const mesesAVoltar = parcelaAtual - 1;
           const partesData = dataCompraStr.split('/');
           let dataRealCompra = dataCompraStr;
@@ -177,10 +173,20 @@ function MainApp() {
     if (transacoesPreview.length === 0) return;
     const novas = [...transacoesPreview, ...transacoes];
     atualizarTransacoes(novas);
+
+    // Ajusta o mês selecionado para o mês do primeiro item importado para facilitar a visualização imediata
+    if (transacoesPreview.length > 0) {
+      const primeiraData = transacoesPreview[0].dataVencimento || transacoesPreview[0].dataCompra;
+      const partes = primeiraData.split('/');
+      if (partes.length === 3) {
+        setMesSelecionado(`${partes[1]}/${partes[2]}`);
+      }
+    }
+
     setModalImportarVisivel(false);
     setConteudoCsvInput('');
     setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso!') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
+    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso! Visualizando mês correspondente.') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
@@ -793,9 +799,9 @@ function MainApp() {
                 <Text style={styles.modalTitulo}>Importador Inteligente de Extrato</Text>
                 <TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity>
               </View>
-              <Text style={styles.label}>Cole o formato do seu extrato (separado por ponto e vírgula):</Text>
+              <Text style={styles.label}>Cole o seu extrato no formato exato:</Text>
               <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 8, fontStyle: 'italic' }}>
-                Formato: [Data Compra] ; [Descrição] ; [Parcela ex: 01/02] ; [Valor Parcela] ; [Valor Total]{"\n"}
+                Data ; Descrição ; Parcela (01/02) ; Valor Parcela ; Valor Total{"\n"}
                 Ex: 23/10; RD SAUDE ONLINE; 01/02; R$ 64,48; R$ 128,96
               </Text>
 
@@ -818,7 +824,7 @@ function MainApp() {
                       <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text>
-                          <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Data/Venc: {item.dataCompra} • {item.categoria} • {item.modalidade}</Text>
+                          <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento} • {item.categoria} • {item.modalidade}</Text>
                         </View>
                         <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#B91C1C' }}>
                           - R$ {item.valor.toFixed(2)}
