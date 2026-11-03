@@ -103,7 +103,7 @@ function MainApp() {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
   };
 
-  // Leitor Inteligente Ajustado para espalhar todas as parcelas corretamente pelos meses subsequentes
+  // Leitor Inteligente Ajustado para respeitar a linha exata do extrato
   const processarTextoCsv = (texto) => {
     const linhas = texto.split('\n');
     let listaProcessada = [];
@@ -113,11 +113,11 @@ function MainApp() {
       const colunas = linha.split(';'); 
       if (colunas.length >= 4) {
         const diaMes = colunas[0]?.trim() || '01/10';
-        const dataOriginalStr = `${diaMes}/${anoCorrente}`;
+        const dataLinhaStr = `${diaMes}/${anoCorrente}`;
         const descStr = colunas[1]?.trim() || 'Importado';
         const parcelaInfoStr = colunas[2]?.trim() || '01/01'; 
         
-        let valorUnitarioNum = parseFloat((colunas[3]?.trim() || '0').replace('R$', '').replace(/\./g, '').replace(',', '.')) || 0;
+        let valorParcelaNum = parseFloat((colunas[3]?.trim() || '0').replace('R$', '').replace(/\./g, '').replace(',', '.')) || 0;
 
         const partesParcela = parcelaInfoStr.split('/');
         const parcelaAtual = parseInt(partesParcela[0], 10) || 1;
@@ -134,31 +134,31 @@ function MainApp() {
           listaProcessada.push({
             id: `${Date.now()}_${idx}`,
             descricao: descStr,
-            valor: valorUnitarioNum,
+            valor: valorParcelaNum,
             tipo: 'saida',
             modalidade: 'a_vista',
             categoria: catSugerida,
-            dataCompra: dataOriginalStr,
-            dataVencimento: dataOriginalStr,
+            dataCompra: dataLinhaStr,
+            dataVencimento: dataLinhaStr,
             fixado: false
           });
         } else {
-          // Descobre a data exata em que a compra começou com base na parcela atual informada no extrato
+          // Descobre o mês de início real retroagindo com base na parcela atual da linha
           const mesesAjusteInicio = parcelaAtual - 1;
-          const partesData = dataOriginalStr.split('/');
-          let dataInicioCompra = dataOriginalStr;
+          const partesData = dataLinhaStr.split('/');
+          let dataInicioCompra = dataLinhaStr;
           if (partesData.length === 3) {
             let dInicio = new Date(parseInt(partesData[2], 10), parseInt(partesData[1], 10) - 1 - mesesAjusteInicio, parseInt(partesData[0], 10));
             dataInicioCompra = `${dInicio.getDate().toString().padStart(2, '0')}/${(dInicio.getMonth() + 1).toString().padStart(2, '0')}/${dInicio.getFullYear()}`;
           }
 
-          // Gera todas as parcelas do ciclo completo (desde a primeira até a última, ultrapassando o ano se necessário)
+          // Cria todas as parcelas do ciclo para que apareçam em seus respectivos meses
           for (let p = 0; p < totalParcelas; p++) {
             const dataVencParcela = somarMesesData(dataInicioCompra, p);
             listaProcessada.push({
               id: `${Date.now()}_${idx}_${p}`,
               descricao: `${descStr} [${p + 1}/${totalParcelas}]`,
-              valor: valorUnitarioNum,
+              valor: valorParcelaNum,
               tipo: 'saida',
               modalidade: 'parcelada',
               parcelasInfo: `${p + 1}/${totalParcelas}`,
@@ -184,7 +184,7 @@ function MainApp() {
     setModalImportarVisivel(false);
     setConteudoCsvInput('');
     setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação e distribuição de parcelas concluídas com sucesso!') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
+    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso!') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
