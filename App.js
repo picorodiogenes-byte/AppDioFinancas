@@ -28,7 +28,6 @@ function MainApp() {
   const [modalSegurancaVisivel, setModalSegurancaVisivel] = useState(false);
   const [biometriaAtiva, setBiometriaAtiva] = useState(false);
 
-  // Estados do Importador CSV Inteligente
   const [modalImportarVisivel, setModalImportarVisivel] = useState(false);
   const [conteudoCsvInput, setConteudoCsvInput] = useState('');
   const [transacoesPreview, setTransacoesPreview] = useState([]);
@@ -103,67 +102,66 @@ function MainApp() {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
   };
 
-  // Leitor Inteligente Ajustado para respeitar a linha exata do extrato
+  // Motor Inteligente de Importação e Geração Subsequente
   const processarTextoCsv = (texto) => {
     const linhas = texto.split('\n');
     let listaProcessada = [];
 
     linhas.forEach((linha, idx) => {
-      if (!linha.trim()) return;
+      if (!linha.trim() || linha.toUpperCase().includes('DATA;')) return; 
+      
       const colunas = linha.split(';'); 
       if (colunas.length >= 4) {
-        const diaMes = colunas[0]?.trim() || '01/10';
-        const dataLinhaStr = `${diaMes}/${anoCorrente}`;
+        const diaMes = colunas[0]?.trim() || '01/01';
+        const dataCompraStr = `${diaMes}/${anoCorrente}`;
         const descStr = colunas[1]?.trim() || 'Importado';
-        const parcelaInfoStr = colunas[2]?.trim() || '01/01'; 
+        const parcelaInfoStr = colunas[2]?.trim() || 'Única'; 
         
-        let valorParcelaNum = parseFloat((colunas[3]?.trim() || '0').replace('R$', '').replace(/\./g, '').replace(',', '.')) || 0;
+        let valorParcelaStr = colunas[3]?.trim() || '0';
+        let isNegativo = valorParcelaStr.includes('-');
+        let valorParcelaNum = parseFloat(valorParcelaStr.replace(/[R$\s-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
 
-        const partesParcela = parcelaInfoStr.split('/');
-        const parcelaAtual = parseInt(partesParcela[0], 10) || 1;
-        const totalParcelas = parseInt(partesParcela[1], 10) || 1;
+        let totalParcelas = 1;
+        if (parcelaInfoStr.toLowerCase() !== 'única' && parcelaInfoStr.includes('/')) {
+          const partesParcela = parcelaInfoStr.split('/');
+          totalParcelas = parseInt(partesParcela[1], 10) || 1;
+        }
 
         let catSugerida = 'Cartão de Crédito';
         const descLower = descStr.toLowerCase();
         if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
-        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude') || descLower.includes('saude online')) catSugerida = 'Alimentação';
+        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude') || descLower.includes('saude online') || descLower.includes('burger king')) catSugerida = 'Alimentação';
         else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
         else if (descLower.includes('salario') || descLower.includes('pix recebido')) catSugerida = 'Renda';
 
-        if (totalParcelas <= 1) {
+        // Determina se é despesa ou receita
+        let tipoTransacao = isNegativo || descLower.includes('estorno') ? 'entrada' : 'saida';
+
+        if (totalParcelas === 1) {
           listaProcessada.push({
             id: `${Date.now()}_${idx}`,
             descricao: descStr,
             valor: valorParcelaNum,
-            tipo: 'saida',
+            tipo: tipoTransacao,
             modalidade: 'a_vista',
             categoria: catSugerida,
-            dataCompra: dataLinhaStr,
-            dataVencimento: dataLinhaStr,
+            dataCompra: dataCompraStr,
+            dataVencimento: somarMesesData(dataCompraStr, 1), 
             fixado: false
           });
         } else {
-          // Descobre o mês de início real retroagindo com base na parcela atual da linha
-          const mesesAjusteInicio = parcelaAtual - 1;
-          const partesData = dataLinhaStr.split('/');
-          let dataInicioCompra = dataLinhaStr;
-          if (partesData.length === 3) {
-            let dInicio = new Date(parseInt(partesData[2], 10), parseInt(partesData[1], 10) - 1 - mesesAjusteInicio, parseInt(partesData[0], 10));
-            dataInicioCompra = `${dInicio.getDate().toString().padStart(2, '0')}/${(dInicio.getMonth() + 1).toString().padStart(2, '0')}/${dInicio.getFullYear()}`;
-          }
-
-          // Cria todas as parcelas do ciclo para que apareçam em seus respectivos meses
-          for (let p = 0; p < totalParcelas; p++) {
-            const dataVencParcela = somarMesesData(dataInicioCompra, p);
+          // Gera todas as faturas a partir do mês subsequente
+          for (let p = 1; p <= totalParcelas; p++) {
+            const dataVencParcela = somarMesesData(dataCompraStr, p);
             listaProcessada.push({
               id: `${Date.now()}_${idx}_${p}`,
-              descricao: `${descStr} [${p + 1}/${totalParcelas}]`,
+              descricao: `${descStr} [${p}/${totalParcelas}]`,
               valor: valorParcelaNum,
-              tipo: 'saida',
+              tipo: tipoTransacao,
               modalidade: 'parcelada',
-              parcelasInfo: `${p + 1}/${totalParcelas}`,
+              parcelasInfo: `${p}/${totalParcelas}`,
               categoria: catSugerida,
-              dataCompra: dataInicioCompra,
+              dataCompra: dataCompraStr,
               dataVencimento: dataVencParcela,
               fixado: false
             });
@@ -173,7 +171,7 @@ function MainApp() {
     });
 
     setTransacoesPreview(listaProcessada);
-    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas com sucesso! Revise a prévia.`);
+    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas no ciclo! Revise a prévia.`);
   };
 
   const confirmarImportacaoLote = () => {
@@ -181,10 +179,19 @@ function MainApp() {
     const novas = [...transacoesPreview, ...transacoes];
     atualizarTransacoes(novas);
 
+    // Ajusta o mês do painel para o primeiro vencimento importado (mês subsequente)
+    if (transacoesPreview.length > 0) {
+      const primeiraData = transacoesPreview[0].dataVencimento;
+      const partes = primeiraData.split('/');
+      if (partes.length === 3) {
+        setMesSelecionado(`${partes[1]}/${partes[2]}`);
+      }
+    }
+
     setModalImportarVisivel(false);
     setConteudoCsvInput('');
     setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso!') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
+    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso! Visualizando cobranças.') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
@@ -824,8 +831,8 @@ function MainApp() {
                           <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text>
                           <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento} • {item.categoria} • {item.modalidade}</Text>
                         </View>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#B91C1C' }}>
-                          - R$ {item.valor.toFixed(2)}
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>
+                          {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
                         </Text>
                       </View>
                     ))}
