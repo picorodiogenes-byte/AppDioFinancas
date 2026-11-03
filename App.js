@@ -91,56 +91,79 @@ function MainApp() {
     catch (e) { console.log('Erro ao salvar metas', e); }
   };
 
-  // Lógica Inteligente de Leitura de CSV
+  const somarMesesData = (dataStr, qtdMeses) => {
+    const partes = dataStr.split('/');
+    if (partes.length !== 3) return dataStr;
+    let d = new Date(parseInt(partes[2], 10), parseInt(partes[1], 10) - 1 + qtdMeses, parseInt(partes[0], 10));
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+  };
+
+  // Leitor Inteligente Ajustado: Data da Compra, Parcelas, Descrição, Valor Total, Categoria(opcional)
   const processarTextoCsv = (texto) => {
     const linhas = texto.split('\n');
     let listaProcessada = [];
 
     linhas.forEach((linha, idx) => {
       if (!linha.trim() || idx === 0) return; // Ignora cabeçalho ou linhas vazias
-      const colunas = linha.split(/,|\t;/); // Aceita vírgula, tabulação ou ponto e vírgula
-      if (colunas.length >= 3) {
-        const dataStr = colunas[0]?.trim() || `${dataHoje.getDate().toString().padStart(2, '0')}/${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${dataHoje.getFullYear()}`;
-        const descStr = colunas[1]?.trim() || 'Importado CSV';
-        let valorNum = parseFloat((colunas[2]?.trim() || '0').replace('R$', '').replace(',', '.')) || 0;
-        
-        let tipoTransacao = valorNum < 0 ? 'saida' : 'entrada';
-        valorNum = Math.abs(valorNum);
+      const colunas = linha.split(/,|\t;/); 
+      if (colunas.length >= 4) {
+        const dataCompraStr = colunas[0]?.trim() || `${dataHoje.getDate().toString().padStart(2, '0')}/${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${dataHoje.getFullYear()}`;
+        const qtdParcelasStr = parseInt(colunas[1]?.trim(), 10) || 1;
+        const descStr = colunas[2]?.trim() || 'Importado CSV';
+        let valorTotalNum = parseFloat((colunas[3]?.trim() || '0').replace('R$', '').replace(',', '.')) || 0;
+        const categoriaInformada = colunas[4]?.trim();
 
-        // Inteligência para detecção de parcelamento no nome (ex: "Compra X 02/10" ou "Parc 3/5")
-        let modalidadeDetectada = 'a_vista';
-        let descLimpa = descStr;
-        const regexParcela = /(\d{1,2})\s*\/\s*(\d{1,2})/g;
-        const matchParcela = regexParcela.exec(descStr);
-        if (matchParcela) {
-          modalidadeDetectada = 'parcelada';
+        let tipoTransacao = valorTotalNum < 0 ? 'saida' : 'entrada';
+        valorTotalNum = Math.abs(valorTotalNum);
+
+        // Definindo Categoria Automática se não informada
+        let catSugerida = categoriaInformada || 'Outros';
+        if (!categoriaInformada) {
+          const descLower = descStr.toLowerCase();
+          if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
+          else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria')) catSugerida = 'Alimentação';
+          else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
+          else if (descLower.includes('salario') || descLower.includes('pix recebido') || descLower.includes('ted')) { catSugerida = 'Renda'; tipoTransacao = 'entrada'; }
+          else if (tipoTransacao === 'saida') catSugerida = 'Cartão de Crédito';
         }
 
-        // Categorização automática inteligente por palavras-chave
-        let catSugerida = 'Outros';
-        const descLower = descStr.toLowerCase();
-        if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
-        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria')) catSugerida = 'Alimentação';
-        else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
-        else if (descLower.includes('salario') || descLower.includes('pix recebido') || descLower.includes('ted')) { catSugerida = 'Renda'; tipoTransacao = 'entrada'; }
-        else if (tipoTransacao === 'saida') catSugerida = 'Cartão de Crédito';
-
-        listaProcessada.push({
-          id: `${Date.now()}_${idx}`,
-          descricao: descLimpa,
-          valor: valorNum,
-          tipo: tipoTransacao,
-          modalidade: modalidadeDetectada,
-          categoria: catSugerida,
-          dataCompra: dataStr,
-          dataVencimento: dataStr,
-          fixado: false
-        });
+        // Lógica de Parcelas vs À Vista
+        if (qtdParcelasStr <= 1 || tipoTransacao === 'entrada') {
+          // Parcela única (1) ou Entrada -> Direto à vista
+          listaProcessada.push({
+            id: `${Date.now()}_${idx}`,
+            descricao: descStr,
+            valor: valorTotalNum,
+            tipo: tipoTransacao,
+            modalidade: 'a_vista',
+            categoria: catSugerida,
+            dataCompra: dataCompraStr,
+            dataVencimento: dataCompraStr,
+            fixado: false
+          });
+        } else {
+          // Compra Parcelada Inteligente
+          const valorParcela = parseFloat((valorTotalNum / qtdParcelasStr).toFixed(2));
+          for (let p = 0; p < qtdParcelasStr; p++) {
+            listaProcessada.push({
+              id: `${Date.now()}_${idx}_${p}`,
+              descricao: `${descStr} [${p + 1}/${qtdParcelasStr}]`,
+              valor: valorParcela,
+              tipo: 'saida',
+              modalidade: 'parcelada',
+              parcelasInfo: `${p + 1}/${qtdParcelasStr}`,
+              categoria: catSugerida,
+              dataCompra: dataCompraStr,
+              dataVencimento: somarMesesData(dataCompraStr, p),
+              fixado: false
+            });
+          }
+        }
       }
     });
 
     setTransacoesPreview(listaProcessada);
-    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} transações analisadas com sucesso! Revise abaixo e confirme.`);
+    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} itens processados com sucesso! Revise a prévia abaixo.`);
   };
 
   const confirmarImportacaoLote = () => {
@@ -311,11 +334,6 @@ function MainApp() {
       dataBaseCompra = `01/${mesSelecionado}`;
       vencimentoBase = `01/${mesSelecionado}`;
     }
-
-    const somarMesesData = (dataStr, qtdMeses) => {
-      const partes = dataStr.split('/'); let d = new Date(parseInt(partes[2], 10), parseInt(partes[1], 10) - 1 + qtdMeses, parseInt(partes[0], 10));
-      return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-    };
 
     let transacoesAtualizadas = [];
 
@@ -760,35 +778,41 @@ function MainApp() {
           <TouchableOpacity style={styles.navItem} onPress={() => setAbaAtual('perfil')}><Feather name="user" size={24} color={abaAtual === 'perfil' ? '#3B82F6' : '#94A3B8'} /><Text style={[styles.navText, abaAtual === 'perfil' && styles.navTextAtivo]}>Perfil</Text></TouchableOpacity>
         </View>
 
-        {/* Modal de Importação CSV Inteligente */}
+        {/* Modal de Importação CSV Inteligente com as novas colunas */}
         <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}>
             <View style={[styles.modalConteudo, { maxHeight: '90%' }]}>
               <View style={styles.modalCabecalho}>
-                <Text style={styles.modalTitulo}>Importar Extrato CSV</Text>
+                <Text style={styles.modalTitulo}>Importar Extrato CSV (Inteligente)</Text>
                 <TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity>
               </View>
-              <Text style={styles.label}>Cole abaixo o conteúdo do seu arquivo CSV (Data, Descrição, Valor):</Text>
+              <Text style={styles.label}>Padrão esperado por linha:</Text>
+              <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 8, fontStyle: 'italic' }}>
+                data_da_compra, parcelas, descrição, valor_total, [categoria opcional]{"\n"}
+                Ex: 10/11/2026, 1, Supermercado, -150.00, Alimentação{"\n"}
+                Ex: 15/11/2026, 5, Notebook Novo, -2500.00
+              </Text>
+
               <TextInput 
                 style={[styles.input, { height: 100, textAlignVertical: 'top' }]} 
                 multiline={true} 
-                placeholder="Ex: 10/11/2026, Supermercado Extra, -150.00" 
+                placeholder="Cole o seu CSV aqui..." 
                 value={conteudoCsvInput} 
                 onChangeText={setConteudoCsvInput} 
               />
               <TouchableOpacity style={[styles.botaoSalvar, { backgroundColor: '#10B981', marginTop: 10 }]} onPress={() => processarTextoCsv(conteudoCsvInput)}>
-                <Text style={styles.textoBotaoSalvar}>Analisar e Organizar com IA</Text>
+                <Text style={styles.textoBotaoSalvar}>Analisar e Processar Parcelas</Text>
               </TouchableOpacity>
 
               {transacoesPreview.length > 0 && (
                 <View style={{ marginTop: 15, flex: 1 }}>
-                  <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} itens encontrados):</Text>
+                  <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} registos gerados):</Text>
                   <ScrollView style={{ maxHeight: 180, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 10 }}>
                     {transacoesPreview.map((item, i) => (
                       <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text>
-                          <Text style={{ fontSize: 11, color: '#64748B' }}>{item.categoria} • {item.modalidade}</Text>
+                          <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento} • {item.categoria} • {item.modalidade}</Text>
                         </View>
                         <Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>
                           {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
@@ -956,7 +980,7 @@ function MainApp() {
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setAbaAtual('visao_anual'), 200); }}><Feather name="bar-chart-2" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Visão Anual</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalCategoriasVisivel(true), 200); }}><Feather name="tag" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Gerenciar Categorias</Text></TouchableOpacity>
                 
-                {/* Botão de Importar CSV posicionado exatamente acima de Exportar Relatórios */}
+                {/* Botão posicionado exatamente acima de Exportar Relatórios */}
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalImportarVisivel(true), 200); }}>
                   <Feather name="upload-cloud" size={22} color="#10B981" />
                   <Text style={[styles.drawerItemText, { color: '#10B981', fontWeight: 'bold' }]}>Importar CSV (Inteligente)</Text>
