@@ -95,11 +95,15 @@ function MainApp() {
   const somarMesesData = (dataStr, qtdMeses) => {
     const partes = dataStr.split('/');
     if (partes.length !== 3) return dataStr;
-    let d = new Date(parseInt(partes[2], 10), parseInt(partes[1], 10) - 1 + qtdMeses, parseInt(partes[0], 10));
+    let dia = parseInt(partes[0], 10);
+    let mes = parseInt(partes[1], 10) - 1 + qtdMeses;
+    let ano = parseInt(partes[2], 10);
+    
+    let d = new Date(ano, mes, dia);
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
   };
 
-  // Leitor Inteligente para formato exato: Data; Descrição; Parcela (01/02); Valor Parcela; Valor Total
+  // Leitor Inteligente Ajustado para espalhar todas as parcelas corretamente pelos meses subsequentes
   const processarTextoCsv = (texto) => {
     const linhas = texto.split('\n');
     let listaProcessada = [];
@@ -108,8 +112,8 @@ function MainApp() {
       if (!linha.trim()) return;
       const colunas = linha.split(';'); 
       if (colunas.length >= 4) {
-        const diaMes = colunas[0]?.trim() || '01/01';
-        const dataCompraStr = `${diaMes}/${anoCorrente}`;
+        const diaMes = colunas[0]?.trim() || '01/10';
+        const dataOriginalStr = `${diaMes}/${anoCorrente}`;
         const descStr = colunas[1]?.trim() || 'Importado';
         const parcelaInfoStr = colunas[2]?.trim() || '01/01'; 
         
@@ -134,20 +138,23 @@ function MainApp() {
             tipo: 'saida',
             modalidade: 'a_vista',
             categoria: catSugerida,
-            dataCompra: dataCompraStr,
-            dataVencimento: dataCompraStr,
+            dataCompra: dataOriginalStr,
+            dataVencimento: dataOriginalStr,
             fixado: false
           });
         } else {
-          const mesesAVoltar = parcelaAtual - 1;
-          const partesData = dataCompraStr.split('/');
-          let dataRealCompra = dataCompraStr;
+          // Descobre a data exata em que a compra começou com base na parcela atual informada no extrato
+          const mesesAjusteInicio = parcelaAtual - 1;
+          const partesData = dataOriginalStr.split('/');
+          let dataInicioCompra = dataOriginalStr;
           if (partesData.length === 3) {
-            let dCompra = new Date(parseInt(partesData[2], 10), parseInt(partesData[1], 10) - 1 - mesesAVoltar, parseInt(partesData[0], 10));
-            dataRealCompra = `${dCompra.getDate().toString().padStart(2, '0')}/${(dCompra.getMonth() + 1).toString().padStart(2, '0')}/${dCompra.getFullYear()}`;
+            let dInicio = new Date(parseInt(partesData[2], 10), parseInt(partesData[1], 10) - 1 - mesesAjusteInicio, parseInt(partesData[0], 10));
+            dataInicioCompra = `${dInicio.getDate().toString().padStart(2, '0')}/${(dInicio.getMonth() + 1).toString().padStart(2, '0')}/${dInicio.getFullYear()}`;
           }
 
+          // Gera todas as parcelas do ciclo completo (desde a primeira até a última, ultrapassando o ano se necessário)
           for (let p = 0; p < totalParcelas; p++) {
+            const dataVencParcela = somarMesesData(dataInicioCompra, p);
             listaProcessada.push({
               id: `${Date.now()}_${idx}_${p}`,
               descricao: `${descStr} [${p + 1}/${totalParcelas}]`,
@@ -156,8 +163,8 @@ function MainApp() {
               modalidade: 'parcelada',
               parcelasInfo: `${p + 1}/${totalParcelas}`,
               categoria: catSugerida,
-              dataCompra: dataRealCompra,
-              dataVencimento: somarMesesData(dataRealCompra, p),
+              dataCompra: dataInicioCompra,
+              dataVencimento: dataVencParcela,
               fixado: false
             });
           }
@@ -166,7 +173,7 @@ function MainApp() {
     });
 
     setTransacoesPreview(listaProcessada);
-    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} itens processados com sucesso! Revise a prévia abaixo.`);
+    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas com sucesso! Revise a prévia.`);
   };
 
   const confirmarImportacaoLote = () => {
@@ -174,19 +181,10 @@ function MainApp() {
     const novas = [...transacoesPreview, ...transacoes];
     atualizarTransacoes(novas);
 
-    // Ajusta o mês selecionado para o mês do primeiro item importado para facilitar a visualização imediata
-    if (transacoesPreview.length > 0) {
-      const primeiraData = transacoesPreview[0].dataVencimento || transacoesPreview[0].dataCompra;
-      const partes = primeiraData.split('/');
-      if (partes.length === 3) {
-        setMesSelecionado(`${partes[1]}/${partes[2]}`);
-      }
-    }
-
     setModalImportarVisivel(false);
     setConteudoCsvInput('');
     setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso! Visualizando mês correspondente.') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
+    Platform.OS === 'web' ? window.alert('Importação e distribuição de parcelas concluídas com sucesso!') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
@@ -398,7 +396,7 @@ function MainApp() {
   const alternarFixar = (id) => { atualizarTransacoes(transacoes.map(t => t.id === id ? { ...t, fixado: !t.fixado } : t)); };
 
   const mostrarDetalhes = (item) => {
-    let msg = `Descrição: ${item.descricao}\nCategoria: ${item.categoria}\nData: ${item.dataCompra}\nValor: R$ ${item.valor.toFixed(2)}`;
+    let msg = `Descrição: ${item.descricao}\nCategoria: ${item.categoria}\nData Compra: ${item.dataCompra}\nVencimento: ${item.dataVencimento}\nValor: R$ ${item.valor.toFixed(2)}`;
     if (item.modalidade) { const rotulos = { a_vista: 'À Vista', parcelada: 'Parcelada', fixa: 'Fixa / Recorrente' }; msg += `\nTipo: ${rotulos[item.modalidade] || item.modalidade}`; }
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert("Detalhes", msg, [{ text: "Fechar", style: "default" }]);
   };
@@ -574,7 +572,7 @@ function MainApp() {
               {item.fixado && <Text style={{ marginRight: 5 }}>📌</Text>}
               <Text style={styles.listCardTitle}>{item.descricao}</Text>
             </View>
-            <Text style={styles.dataVencimentoText}>{item.dataCompra}</Text>
+            <Text style={styles.dataVencimentoText}>Vencimento: {item.dataVencimento}</Text>
           </View>
           <View style={{ alignItems: 'flex-end', flexDirection: 'row' }}>
             <Text style={[styles.listCardValue, item.tipo === 'entrada' ? styles.verde : styles.vermelho, { marginRight: 12 }]}>
@@ -813,12 +811,12 @@ function MainApp() {
                 onChangeText={setConteudoCsvInput} 
               />
               <TouchableOpacity style={[styles.botaoSalvar, { backgroundColor: '#10B981', marginTop: 10 }]} onPress={() => processarTextoCsv(conteudoCsvInput)}>
-                <Text style={styles.textoBotaoSalvar}>Processar e Organizar Parcelas</Text>
+                <Text style={styles.textoBotaoSalvar}>Processar Ciclo de Parcelas</Text>
               </TouchableOpacity>
 
               {transacoesPreview.length > 0 && (
                 <View style={{ marginTop: 15, flex: 1 }}>
-                  <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} itens gerados):</Text>
+                  <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} parcelas geradas):</Text>
                   <ScrollView style={{ maxHeight: 180, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 10 }}>
                     {transacoesPreview.map((item, i) => (
                       <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
@@ -833,7 +831,7 @@ function MainApp() {
                     ))}
                   </ScrollView>
                   <TouchableOpacity style={[styles.botaoSalvar, { marginTop: 15 }]} onPress={confirmarImportacaoLote}>
-                    <Text style={styles.textoBotaoSalvar}>Confirmar e Inserir no Extrato</Text>
+                    <Text style={styles.textoBotaoSalvar}>Confirmar e Distribuir nos Meses</Text>
                   </TouchableOpacity>
                 </View>
               )}
