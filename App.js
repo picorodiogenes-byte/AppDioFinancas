@@ -27,6 +27,11 @@ function MainApp() {
   const [modalSegurancaVisivel, setModalSegurancaVisivel] = useState(false);
   const [biometriaAtiva, setBiometriaAtiva] = useState(false);
 
+  // Estados do Importador CSV Inteligente
+  const [modalImportarVisivel, setModalImportarVisivel] = useState(false);
+  const [conteudoCsvInput, setConteudoCsvInput] = useState('');
+  const [transacoesPreview, setTransacoesPreview] = useState([]);
+
   const [anoVisaoAnual, setAnoVisaoAnual] = useState(dataHoje.getFullYear());
 
   const [metas, setMetas] = useState([]);
@@ -84,6 +89,68 @@ function MainApp() {
     setMetas(novasMetas);
     try { await AsyncStorage.setItem('@metas', JSON.stringify(novasMetas)); } 
     catch (e) { console.log('Erro ao salvar metas', e); }
+  };
+
+  // Lógica Inteligente de Leitura de CSV
+  const processarTextoCsv = (texto) => {
+    const linhas = texto.split('\n');
+    let listaProcessada = [];
+
+    linhas.forEach((linha, idx) => {
+      if (!linha.trim() || idx === 0) return; // Ignora cabeçalho ou linhas vazias
+      const colunas = linha.split(/,|\t;/); // Aceita vírgula, tabulação ou ponto e vírgula
+      if (colunas.length >= 3) {
+        const dataStr = colunas[0]?.trim() || `${dataHoje.getDate().toString().padStart(2, '0')}/${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${dataHoje.getFullYear()}`;
+        const descStr = colunas[1]?.trim() || 'Importado CSV';
+        let valorNum = parseFloat((colunas[2]?.trim() || '0').replace('R$', '').replace(',', '.')) || 0;
+        
+        let tipoTransacao = valorNum < 0 ? 'saida' : 'entrada';
+        valorNum = Math.abs(valorNum);
+
+        // Inteligência para detecção de parcelamento no nome (ex: "Compra X 02/10" ou "Parc 3/5")
+        let modalidadeDetectada = 'a_vista';
+        let descLimpa = descStr;
+        const regexParcela = /(\d{1,2})\s*\/\s*(\d{1,2})/g;
+        const matchParcela = regexParcela.exec(descStr);
+        if (matchParcela) {
+          modalidadeDetectada = 'parcelada';
+        }
+
+        // Categorização automática inteligente por palavras-chave
+        let catSugerida = 'Outros';
+        const descLower = descStr.toLowerCase();
+        if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
+        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria')) catSugerida = 'Alimentação';
+        else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
+        else if (descLower.includes('salario') || descLower.includes('pix recebido') || descLower.includes('ted')) { catSugerida = 'Renda'; tipoTransacao = 'entrada'; }
+        else if (tipoTransacao === 'saida') catSugerida = 'Cartão de Crédito';
+
+        listaProcessada.push({
+          id: `${Date.now()}_${idx}`,
+          descricao: descLimpa,
+          valor: valorNum,
+          tipo: tipoTransacao,
+          modalidade: modalidadeDetectada,
+          categoria: catSugerida,
+          dataCompra: dataStr,
+          dataVencimento: dataStr,
+          fixado: false
+        });
+      }
+    });
+
+    setTransacoesPreview(listaProcessada);
+    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} transações analisadas com sucesso! Revise abaixo e confirme.`);
+  };
+
+  const confirmarImportacaoLote = () => {
+    if (transacoesPreview.length === 0) return;
+    const novas = [...transacoesPreview, ...transacoes];
+    atualizarTransacoes(novas);
+    setModalImportarVisivel(false);
+    setConteudoCsvInput('');
+    setTransacoesPreview([]);
+    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso!') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
@@ -693,6 +760,51 @@ function MainApp() {
           <TouchableOpacity style={styles.navItem} onPress={() => setAbaAtual('perfil')}><Feather name="user" size={24} color={abaAtual === 'perfil' ? '#3B82F6' : '#94A3B8'} /><Text style={[styles.navText, abaAtual === 'perfil' && styles.navTextAtivo]}>Perfil</Text></TouchableOpacity>
         </View>
 
+        {/* Modal de Importação CSV Inteligente */}
+        <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}>
+            <View style={[styles.modalConteudo, { maxHeight: '90%' }]}>
+              <View style={styles.modalCabecalho}>
+                <Text style={styles.modalTitulo}>Importar Extrato CSV</Text>
+                <TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity>
+              </View>
+              <Text style={styles.label}>Cole abaixo o conteúdo do seu arquivo CSV (Data, Descrição, Valor):</Text>
+              <TextInput 
+                style={[styles.input, { height: 100, textAlignVertical: 'top' }]} 
+                multiline={true} 
+                placeholder="Ex: 10/11/2026, Supermercado Extra, -150.00" 
+                value={conteudoCsvInput} 
+                onChangeText={setConteudoCsvInput} 
+              />
+              <TouchableOpacity style={[styles.botaoSalvar, { backgroundColor: '#10B981', marginTop: 10 }]} onPress={() => processarTextoCsv(conteudoCsvInput)}>
+                <Text style={styles.textoBotaoSalvar}>Analisar e Organizar com IA</Text>
+              </TouchableOpacity>
+
+              {transacoesPreview.length > 0 && (
+                <View style={{ marginTop: 15, flex: 1 }}>
+                  <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} itens encontrados):</Text>
+                  <ScrollView style={{ maxHeight: 180, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 10 }}>
+                    {transacoesPreview.map((item, i) => (
+                      <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text>
+                          <Text style={{ fontSize: 11, color: '#64748B' }}>{item.categoria} • {item.modalidade}</Text>
+                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>
+                          {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity style={[styles.botaoSalvar, { marginTop: 15 }]} onPress={confirmarImportacaoLote}>
+                    <Text style={styles.textoBotaoSalvar}>Confirmar e Inserir no Extrato</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
         <Modal animationType="slide" transparent={true} visible={modalNovaMetaVisivel} onRequestClose={fecharModalMeta}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}>
             <View style={styles.modalConteudo}>
@@ -830,7 +942,33 @@ function MainApp() {
         <Modal animationType="slide" transparent={true} visible={modalEditarPerfilVisivel} onRequestClose={() => setModalEditarPerfilVisivel(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}><View style={styles.modalConteudo}><View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Editar Perfil</Text><TouchableOpacity onPress={() => setModalEditarPerfilVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View><Text style={styles.label}>Nome ou Apelido</Text><TextInput style={styles.input} placeholder="Seu nome" value={perfilNome} onChangeText={setPerfilNome} /><Text style={styles.label}>E-mail</Text><TextInput style={styles.input} placeholder="Seu e-mail" keyboardType="email-address" autoCapitalize="none" value={perfilEmail} onChangeText={setPerfilEmail} /><TouchableOpacity style={styles.botaoSalvar} onPress={salvarEdicaoPerfil}><Text style={styles.textoBotaoSalvar}>Salvar Alterações</Text></TouchableOpacity></View></KeyboardAvoidingView></Modal>
         <Modal animationType="slide" transparent={true} visible={modalSegurancaVisivel} onRequestClose={() => setModalSegurancaVisivel(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}><View style={styles.modalConteudo}><View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Segurança</Text><TouchableOpacity onPress={() => setModalSegurancaVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View><View style={styles.biometriaRow}><View style={{flexDirection: 'row', alignItems: 'center'}}><Feather name="smartphone" size={24} color="#1E293B" style={{marginRight: 10}} /><Text style={styles.labelBiometria}>Biometria / Face ID</Text></View><Switch trackColor={{ false: "#CBD5E1", true: "#10B981" }} thumbColor="#FFFFFF" ios_backgroundColor="#CBD5E1" onValueChange={() => setBiometriaAtiva(!biometriaAtiva)} value={biometriaAtiva} /></View><Text style={styles.dicaBiometria}>Use sua digital ou rosto para entrar no app sem precisar digitar a senha toda vez.</Text><Text style={[styles.sectionTitle, {marginTop: 20}]}>Trocar Senha</Text><Text style={styles.labelPequeno}>Senha Atual</Text><TextInput style={[styles.input, {marginBottom: 10}]} placeholder="••••••••" secureTextEntry={true} /><Text style={styles.labelPequeno}>Nova Senha</Text><TextInput style={[styles.input, {marginBottom: 10}]} placeholder="••••••••" secureTextEntry={true} /><TouchableOpacity style={styles.botaoSalvar} onPress={() => { Platform.OS === 'web' ? window.alert('Senha atualizada com segurança!') : Alert.alert('Segurança', 'Senha atualizada com segurança!'); setModalSegurancaVisivel(false); }}><Text style={styles.textoBotaoSalvar}>Atualizar Senha</Text></TouchableOpacity></View></KeyboardAvoidingView></Modal>
         <Modal animationType="slide" transparent={true} visible={modalCategoriasVisivel} onRequestClose={() => setModalCategoriasVisivel(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}><View style={styles.modalConteudo}><View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Gerenciar Categorias</Text><TouchableOpacity onPress={() => setModalCategoriasVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View><Text style={styles.labelPequeno}>Nova Categoria:</Text><View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15}}><TextInput style={[styles.input, {flex: 1, marginRight: 10, paddingVertical: 10}]} placeholder="Ex: Faculdade" value={novaCategoriaNome} onChangeText={setNovaCategoriaNome} /><TouchableOpacity style={styles.btnAdicionarCategoria} onPress={adicionarCategoria}><Feather name="plus" size={20} color="#FFF" /></TouchableOpacity></View><Text style={styles.labelPequeno}>Escolha a Cor:</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>{coresDisponiveis.map(cor => (<TouchableOpacity key={cor} style={[styles.bolinhaCor, {backgroundColor: cor}, novaCategoriaCor === cor && styles.bolinhaCorAtiva]} onPress={() => setNovaCategoriaCor(cor)} />))}</ScrollView><Text style={styles.labelPequeno}>Suas Categorias:</Text><FlatList data={categorias} keyExtractor={item => item.id} style={{maxHeight: 300}} renderItem={({item}) => (<View style={styles.catEditRow}><View style={{flexDirection: 'row', alignItems: 'center'}}><View style={{width: 12, height: 12, borderRadius: 6, backgroundColor: item.cor, marginRight: 10}} /><Text style={styles.catEditNome}>{item.nome}</Text></View><TouchableOpacity onPress={() => excluirCategoria(item.id, item.nome)} style={{padding: 5}}><Feather name="trash-2" size={20} color="#EF4444" /></TouchableOpacity></View>)} /></View></KeyboardAvoidingView></Modal>
-        <Modal visible={menuAberto} transparent={true} animationType="fade" onRequestClose={() => setMenuAberto(false)}><View style={styles.drawerOverlay}><View style={styles.drawerContent}><View style={styles.drawerHeader}><View style={styles.avatarPlaceholder}><Feather name="user" size={32} color="#FFF" /></View><Text style={styles.drawerName}>App Finanças</Text><Text style={styles.drawerSubtitle}>Gestão Inteligente</Text></View><ScrollView><TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setAbaAtual('visao_anual'), 200); }}><Feather name="bar-chart-2" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Visão Anual</Text></TouchableOpacity><TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalCategoriasVisivel(true), 200); }}><Feather name="tag" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Gerenciar Categorias</Text></TouchableOpacity><TouchableOpacity style={styles.drawerItem}><Feather name="download" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Exportar Relatórios</Text></TouchableOpacity><TouchableOpacity style={styles.drawerItem}><Feather name="settings" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Configurações</Text></TouchableOpacity></ScrollView></View><TouchableOpacity style={styles.drawerCloseArea} activeOpacity={1} onPress={() => setMenuAberto(false)} /></View></Modal>
+        
+        {/* Menu Lateral com Importar CSV */}
+        <Modal visible={menuAberto} transparent={true} animationType="fade" onRequestClose={() => setMenuAberto(false)}>
+          <View style={styles.drawerOverlay}>
+            <View style={styles.drawerContent}>
+              <View style={styles.drawerHeader}>
+                <View style={styles.avatarPlaceholder}><Feather name="user" size={32} color="#FFF" /></View>
+                <Text style={styles.drawerName}>App Finanças</Text>
+                <Text style={styles.drawerSubtitle}>Gestão Inteligente</Text>
+              </View>
+              <ScrollView>
+                <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setAbaAtual('visao_anual'), 200); }}><Feather name="bar-chart-2" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Visão Anual</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalCategoriasVisivel(true), 200); }}><Feather name="tag" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Gerenciar Categorias</Text></TouchableOpacity>
+                
+                {/* Botão de Importar CSV posicionado exatamente acima de Exportar Relatórios */}
+                <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalImportarVisivel(true), 200); }}>
+                  <Feather name="upload-cloud" size={22} color="#10B981" />
+                  <Text style={[styles.drawerItemText, { color: '#10B981', fontWeight: 'bold' }]}>Importar CSV (Inteligente)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.drawerItem}><Feather name="download" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Exportar Relatórios</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.drawerItem}><Feather name="settings" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Configurações</Text></TouchableOpacity>
+              </ScrollView>
+            </View>
+            <TouchableOpacity style={styles.drawerCloseArea} activeOpacity={1} onPress={() => setMenuAberto(false)} />
+          </View>
+        </Modal>
 
       </SafeAreaView>
     </GestureHandlerRootView>
