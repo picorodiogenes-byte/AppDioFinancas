@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, TouchableOpacity, Alert, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Switch, RefreshControl } from 'react-native';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-function MainApp() {
+function MainApp({ session }) {
+  const userId = session.user.id;
   const [abaAtual, setAbaAtual] = useState('dashboard'); 
   
   const dataHoje = new Date();
@@ -22,8 +22,8 @@ function MainApp() {
   const [refreshing, setRefreshing] = useState(false);
   const [categoriasExpandidas, setCategoriasExpandidas] = useState({});
 
-  const [perfilNome, setPerfilNome] = useState('Dinho');
-  const [perfilEmail, setPerfilEmail] = useState('dinho@email.com.br');
+  const [perfilNome, setPerfilNome] = useState('Diógenes Pícoro');
+  const [perfilEmail, setPerfilEmail] = useState(session.user.email);
   const [modalEditarPerfilVisivel, setModalEditarPerfilVisivel] = useState(false);
   const [modalSegurancaVisivel, setModalSegurancaVisivel] = useState(false);
   const [biometriaAtiva, setBiometriaAtiva] = useState(false);
@@ -44,51 +44,56 @@ function MainApp() {
 
   const carregarDados = async () => {
     try {
-      const transacoesSalvas = await AsyncStorage.getItem('@transacoes');
-      const categoriasSalvas = await AsyncStorage.getItem('@categorias');
-      const metasSalvas = await AsyncStorage.getItem('@metas');
-      const nomeSalvo = await AsyncStorage.getItem('@perfilNome');
-
-      if (transacoesSalvas) setTransacoes(JSON.parse(transacoesSalvas));
+      const { data, error } = await supabase.from('cloud_state').select('*').eq('user_id', userId).maybeSingle();
       
-      if (categoriasSalvas) {
-        setCategorias(JSON.parse(categoriasSalvas));
-      } else {
-        const categoriasPadrao = [
-          { id: '1', nome: 'Alimentação', cor: '#F59E0B' }, { id: '2', nome: 'Moradia', cor: '#3B82F6' },
-          { id: '3', nome: 'Cartão de Crédito', cor: '#8B5CF6' }, { id: '4', nome: 'Família', cor: '#10B981' },
-          { id: '5', nome: 'Namorada', cor: '#EC4899' }, { id: '6', nome: 'Amigos', cor: '#14B8A6' },
-          { id: '7', nome: 'Lazer', cor: '#F43F5E' }, { id: '8', nome: 'Saúde', cor: '#06B6D4' },
-          { id: '9', nome: 'Renda', cor: '#10B981' }, { id: '10', nome: 'Outros', cor: '#64748B' }
-        ];
+      const categoriasPadrao = [
+        { id: '1', nome: 'Alimentação', cor: '#F59E0B' }, { id: '2', nome: 'Moradia', cor: '#3B82F6' },
+        { id: '3', nome: 'Cartão de Crédito', cor: '#8B5CF6' }, { id: '4', nome: 'Família', cor: '#10B981' },
+        { id: '5', nome: 'Namorada', cor: '#EC4899' }, { id: '6', nome: 'Amigos', cor: '#14B8A6' },
+        { id: '7', nome: 'Lazer', cor: '#F43F5E' }, { id: '8', nome: 'Saúde', cor: '#06B6D4' },
+        { id: '9', nome: 'Renda', cor: '#10B981' }, { id: '10', nome: 'Outros', cor: '#64748B' }
+      ];
+
+      if (!data) {
+        // Primeiro acesso do utilizador: cria o cofre na nuvem
+        await supabase.from('cloud_state').insert({
+          user_id: userId,
+          transacoes: [],
+          categorias: categoriasPadrao,
+          metas: [],
+          perfil_nome: 'Diógenes Pícoro',
+          perfil_email: session.user.email
+        });
         setCategorias(categoriasPadrao);
-        AsyncStorage.setItem('@categorias', JSON.stringify(categoriasPadrao));
+      } else {
+        // Carrega o extrato guardado na nuvem
+        setTransacoes(data.transacoes || []);
+        setCategorias(data.categorias && data.categorias.length > 0 ? data.categorias : categoriasPadrao);
+        setMetas(data.metas || []);
+        if (data.perfil_nome) setPerfilNome(data.perfil_nome);
+        if (data.perfil_email) setPerfilEmail(data.perfil_email);
       }
-
-      if (metasSalvas) setMetas(JSON.parse(metasSalvas));
-      if (nomeSalvo) setPerfilNome(nomeSalvo);
-
     } catch (e) {
-      console.log('Erro ao carregar dados', e);
+      console.log('Erro ao carregar dados da nuvem', e);
     }
   };
 
   const atualizarTransacoes = async (novasTransacoes) => {
     setTransacoes(novasTransacoes);
-    try { await AsyncStorage.setItem('@transacoes', JSON.stringify(novasTransacoes)); } 
-    catch (e) { console.log('Erro ao salvar transações', e); }
+    try { await supabase.from('cloud_state').update({ transacoes: novasTransacoes }).eq('user_id', userId); } 
+    catch (e) { console.log('Erro ao salvar transações na nuvem', e); }
   };
 
   const atualizarCategorias = async (novasCategorias) => {
     setCategorias(novasCategorias);
-    try { await AsyncStorage.setItem('@categorias', JSON.stringify(novasCategorias)); } 
-    catch (e) { console.log('Erro ao salvar categorias', e); }
+    try { await supabase.from('cloud_state').update({ categorias: novasCategorias }).eq('user_id', userId); } 
+    catch (e) { console.log('Erro ao salvar categorias na nuvem', e); }
   };
 
   const atualizarMetas = async (novasMetas) => {
     setMetas(novasMetas);
-    try { await AsyncStorage.setItem('@metas', JSON.stringify(novasMetas)); } 
-    catch (e) { console.log('Erro ao salvar metas', e); }
+    try { await supabase.from('cloud_state').update({ metas: novasMetas }).eq('user_id', userId); } 
+    catch (e) { console.log('Erro ao salvar metas na nuvem', e); }
   };
 
   const somarMesesData = (dataStr, qtdMeses) => {
@@ -102,7 +107,6 @@ function MainApp() {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
   };
 
-  // Motor Inteligente de Importação e Geração Subsequente
   const processarTextoCsv = (texto) => {
     const linhas = texto.split('\n');
     let listaProcessada = [];
@@ -134,7 +138,6 @@ function MainApp() {
         else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
         else if (descLower.includes('salario') || descLower.includes('pix recebido')) catSugerida = 'Renda';
 
-        // Determina se é despesa ou receita
         let tipoTransacao = isNegativo || descLower.includes('estorno') ? 'entrada' : 'saida';
 
         if (totalParcelas === 1) {
@@ -150,7 +153,6 @@ function MainApp() {
             fixado: false
           });
         } else {
-          // Gera todas as faturas a partir do mês subsequente
           for (let p = 1; p <= totalParcelas; p++) {
             const dataVencParcela = somarMesesData(dataCompraStr, p);
             listaProcessada.push({
@@ -179,7 +181,6 @@ function MainApp() {
     const novas = [...transacoesPreview, ...transacoes];
     atualizarTransacoes(novas);
 
-    // Ajusta o mês do painel para o primeiro vencimento importado (mês subsequente)
     if (transacoesPreview.length > 0) {
       const primeiraData = transacoesPreview[0].dataVencimento;
       const partes = primeiraData.split('/');
@@ -191,7 +192,7 @@ function MainApp() {
     setModalImportarVisivel(false);
     setConteudoCsvInput('');
     setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação concluída com sucesso! Visualizando cobranças.') : Alert.alert('Sucesso', 'Importação concluída com sucesso!');
+    Platform.OS === 'web' ? window.alert('Importação concluída e salva na nuvem! Visualizando cobranças.') : Alert.alert('Sucesso', 'Importação salva na nuvem!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
@@ -326,8 +327,7 @@ function MainApp() {
   const arrayDias = Array.from({ length: diasNoMes }, (_, i) => i + 1);
 
   const escolherTipoTransacao = (tipo) => {
-    const hoje = new Date();
-    const dataHojeFormatada = `${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
+    const dataHojeFormatada = `${dataHoje.getDate().toString().padStart(2, '0')}/${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
     setNovoTipo(tipo); setNovaCategoriaForm(tipo === 'entrada' ? 'Renda' : 'Cartão de Crédito'); setNovaDataCompra(dataHojeFormatada); setNovaDataVencimento(dataHojeFormatada); 
     setMenuAdicionarVisivel(false); setTimeout(() => { setModalVisivel(true); }, 150);
   };
@@ -498,8 +498,7 @@ function MainApp() {
     atualizarMetas(novasMetas);
 
     if (origemDeposito === 'carteira') {
-      const hoje = new Date();
-      const dataHojeFormatada = `${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
+      const dataHojeFormatada = `${dataHoje.getDate().toString().padStart(2, '0')}/${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
       
       const novaTransacao = {
         id: Date.now().toString() + '_dep',
@@ -519,20 +518,20 @@ function MainApp() {
     setValorDeposito(''); 
     setMetaSelecionada(null);
     setOrigemDeposito('carteira');
-    Platform.OS === 'web' ? window.alert("Dinheiro guardado com sucesso!") : Alert.alert("Sucesso", "Dinheiro guardado com sucesso!");
+    Platform.OS === 'web' ? window.alert("Dinheiro guardado na nuvem!") : Alert.alert("Sucesso", "Dinheiro guardado na nuvem!");
   };
 
   const abrirDepositarMeta = (meta) => { setMetaSelecionada(meta); setOrigemDeposito('carteira'); setModalDepositarVisivel(true); };
 
   const lerNotificacao = () => {
-    if (temNotificacao) { Platform.OS === 'web' ? window.alert("Tudo atualizado!") : Alert.alert("Sucesso", "Tudo atualizado!"); setTemNotificacao(false); } 
-    else { Platform.OS === 'web' ? window.alert("Sem notificações.") : Alert.alert("Notificações", "Sem notificações."); }
+    if (temNotificacao) { Platform.OS === 'web' ? window.alert("Tudo atualizado e sincronizado!") : Alert.alert("Sucesso", "Tudo sincronizado!"); setTemNotificacao(false); } 
+    else { Platform.OS === 'web' ? window.alert("Sem notificações pendentes.") : Alert.alert("Notificações", "Sem notificações."); }
   };
 
   const salvarEdicaoPerfil = async () => {
     try {
-      await AsyncStorage.setItem('@perfilNome', perfilNome);
-      Platform.OS === 'web' ? window.alert('Perfil atualizado!') : Alert.alert('Sucesso', 'Perfil atualizado!'); 
+      await supabase.from('cloud_state').update({ perfil_nome: perfilNome, perfil_email: perfilEmail }).eq('user_id', userId);
+      Platform.OS === 'web' ? window.alert('Perfil atualizado na nuvem!') : Alert.alert('Sucesso', 'Perfil atualizado na nuvem!'); 
       setModalEditarPerfilVisivel(false);
     } catch (e) { console.log('Erro ao salvar perfil', e); }
   }
@@ -667,7 +666,7 @@ function MainApp() {
   };
 
   const renderPerfil = () => (
-    <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}><View style={styles.perfilHeader}><View style={styles.perfilAvatarGiga}><Feather name="user" size={45} color="#FFF" /></View><Text style={styles.perfilNomeGiga}>{perfilNome}</Text><Text style={styles.perfilEmailGiga}>{perfilEmail}</Text></View><View style={styles.perfilSectionContainer}><Text style={styles.perfilSectionTitle}>Minha Conta</Text><TouchableOpacity style={styles.perfilOpcaoBtn} onPress={() => setModalEditarPerfilVisivel(true)}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#EFF6FF' }]}><Feather name="edit-2" size={20} color="#3B82F6" /></View><Text style={styles.perfilOpcaoTexto}>Editar Perfil</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn} onPress={() => setModalSegurancaVisivel(true)}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#FEF2F2' }]}><Feather name="shield" size={20} color="#EF4444" /></View><Text style={styles.perfilOpcaoTexto}>Segurança e Senhas</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F0FDF4' }]}><Feather name="credit-card" size={20} color="#10B981" /></View><Text style={styles.perfilOpcaoTexto}>Assinatura (Premium)</Text></View><Text style={styles.perfilTagFree}>Plano Grátis</Text></TouchableOpacity></View><View style={styles.perfilSectionContainer}><Text style={styles.perfilSectionTitle}>Aplicativo</Text><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F1F5F9' }]}><Feather name="moon" size={20} color="#64748B" /></View><Text style={styles.perfilOpcaoTexto}>Modo Escuro</Text></View><Feather name="toggle-left" size={24} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F1F5F9' }]}><Feather name="help-circle" size={20} color="#64748B" /></View><Text style={styles.perfilOpcaoTexto}>Central de Ajuda</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity></View><TouchableOpacity style={styles.btnSair}><Feather name="log-out" size={20} color="#EF4444" /><Text style={styles.btnSairTexto}>Sair do Aplicativo</Text></TouchableOpacity><View style={{height: 100}} /></ScrollView>
+    <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}><View style={styles.perfilHeader}><View style={styles.perfilAvatarGiga}><Feather name="user" size={45} color="#FFF" /></View><Text style={styles.perfilNomeGiga}>{perfilNome}</Text><Text style={styles.perfilEmailGiga}>{perfilEmail}</Text></View><View style={styles.perfilSectionContainer}><Text style={styles.perfilSectionTitle}>Minha Conta</Text><TouchableOpacity style={styles.perfilOpcaoBtn} onPress={() => setModalEditarPerfilVisivel(true)}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#EFF6FF' }]}><Feather name="edit-2" size={20} color="#3B82F6" /></View><Text style={styles.perfilOpcaoTexto}>Editar Perfil</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn} onPress={() => setModalSegurancaVisivel(true)}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#FEF2F2' }]}><Feather name="shield" size={20} color="#EF4444" /></View><Text style={styles.perfilOpcaoTexto}>Segurança e Senhas</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F0FDF4' }]}><Feather name="credit-card" size={20} color="#10B981" /></View><Text style={styles.perfilOpcaoTexto}>Assinatura (Premium)</Text></View><Text style={styles.perfilTagFree}>Plano Grátis</Text></TouchableOpacity></View><View style={styles.perfilSectionContainer}><Text style={styles.perfilSectionTitle}>Aplicativo</Text><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F1F5F9' }]}><Feather name="moon" size={20} color="#64748B" /></View><Text style={styles.perfilOpcaoTexto}>Modo Escuro</Text></View><Feather name="toggle-left" size={24} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F1F5F9' }]}><Feather name="help-circle" size={20} color="#64748B" /></View><Text style={styles.perfilOpcaoTexto}>Central de Ajuda</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity></View><TouchableOpacity style={styles.btnSair} onPress={async () => { await supabase.auth.signOut(); }}><Feather name="log-out" size={20} color="#EF4444" /><Text style={styles.btnSairTexto}>Sair do Aplicativo</Text></TouchableOpacity><View style={{height: 100}} /></ScrollView>
   );
 
   const renderVisaoAnual = () => {
@@ -818,7 +817,7 @@ function MainApp() {
                 onChangeText={setConteudoCsvInput} 
               />
               <TouchableOpacity style={[styles.botaoSalvar, { backgroundColor: '#10B981', marginTop: 10 }]} onPress={() => processarTextoCsv(conteudoCsvInput)}>
-                <Text style={styles.textoBotaoSalvar}>Processar Ciclo de Parcelas</Text>
+                <Text style={styles.textoBotaoSalvar}>Processar e Salvar na Nuvem</Text>
               </TouchableOpacity>
 
               {transacoesPreview.length > 0 && (
@@ -831,14 +830,14 @@ function MainApp() {
                           <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text>
                           <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento} • {item.categoria} • {item.modalidade}</Text>
                         </View>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>
-                          {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#B91C1C' }}>
+                          - R$ {item.valor.toFixed(2)}
                         </Text>
                       </View>
                     ))}
                   </ScrollView>
                   <TouchableOpacity style={[styles.botaoSalvar, { marginTop: 15 }]} onPress={confirmarImportacaoLote}>
-                    <Text style={styles.textoBotaoSalvar}>Confirmar e Distribuir nos Meses</Text>
+                    <Text style={styles.textoBotaoSalvar}>Confirmar e Inserir no Extrato</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -932,14 +931,7 @@ function MainApp() {
             {calendarioVisivel && (
               <View style={styles.calendarioOverlay}>
                 <View style={styles.calendarioBox}>
-                  <View style={styles.calTopo}>
-                    <TouchableOpacity onPress={() => setCalMes(calMes === 1 ? 12 : calMes - 1)}><Text style={styles.calSeta}>{'<'}</Text></TouchableOpacity>
-                    <Text style={styles.calTitulo}>{nomesMeses[calMes.toString().padStart(2, '0')]} {calAno}</Text>
-                    <TouchableOpacity onPress={() => setCalMes(calMes === 12 ? 1 : calMes + 1)}><Text style={styles.calSeta}>{'>'}</Text></TouchableOpacity>
-                  </View>
-                  <View style={styles.gridDias}>{arrayDias.map((dia) => (<TouchableOpacity key={dia} style={styles.diaItem} onPress={() => selecionarDia(dia)}><Text style={styles.diaTexto}>{dia}</Text></TouchableOpacity>))}</View>
-                  <TouchableOpacity style={styles.btnFecharCal} onPress={() => setCalendarioVisivel(false)}><Text style={styles.textoFecharCal}>Cancelar</Text></TouchableOpacity>
-                </View>
+                  <View style={styles.calTopo}><TouchableOpacity onPress={() => setCalMes(calMes === 1 ? 12 : calMes - 1)}><Text style={styles.calSeta}>{'<'}</Text></TouchableOpacity><Text style={styles.calTitulo}>{nomesMeses[calMes.toString().padStart(2, '0')]} {calAno}</Text><TouchableOpacity onPress={() => setCalMes(calMes === 12 ? 1 : calMes + 1)}><Text style={styles.calSeta}>{'>'}</Text></TouchableOpacity></View><View style={styles.gridDias}>{arrayDias.map((dia) => (<TouchableOpacity key={dia} style={styles.diaItem} onPress={() => selecionarDia(dia)}><Text style={styles.diaTexto}>{dia}</Text></TouchableOpacity>))}</View><TouchableOpacity style={styles.btnFecharCal} onPress={() => setCalendarioVisivel(false)}><Text style={styles.textoFecharCal}>Cancelar</Text></TouchableOpacity></View>
               </View>
             )}
           </KeyboardAvoidingView>
@@ -984,7 +976,6 @@ function MainApp() {
         <Modal animationType="slide" transparent={true} visible={modalSegurancaVisivel} onRequestClose={() => setModalSegurancaVisivel(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}><View style={styles.modalConteudo}><View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Segurança</Text><TouchableOpacity onPress={() => setModalSegurancaVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View><View style={styles.biometriaRow}><View style={{flexDirection: 'row', alignItems: 'center'}}><Feather name="smartphone" size={24} color="#1E293B" style={{marginRight: 10}} /><Text style={styles.labelBiometria}>Biometria / Face ID</Text></View><Switch trackColor={{ false: "#CBD5E1", true: "#10B981" }} thumbColor="#FFFFFF" ios_backgroundColor="#CBD5E1" onValueChange={() => setBiometriaAtiva(!biometriaAtiva)} value={biometriaAtiva} /></View><Text style={styles.dicaBiometria}>Use sua digital ou rosto para entrar no app sem precisar digitar a senha toda vez.</Text><Text style={[styles.sectionTitle, {marginTop: 20}]}>Trocar Senha</Text><Text style={styles.labelPequeno}>Senha Atual</Text><TextInput style={[styles.input, {marginBottom: 10}]} placeholder="••••••••" secureTextEntry={true} /><Text style={styles.labelPequeno}>Nova Senha</Text><TextInput style={[styles.input, {marginBottom: 10}]} placeholder="••••••••" secureTextEntry={true} /><TouchableOpacity style={styles.botaoSalvar} onPress={() => { Platform.OS === 'web' ? window.alert('Senha atualizada com segurança!') : Alert.alert('Segurança', 'Senha atualizada com segurança!'); setModalSegurancaVisivel(false); }}><Text style={styles.textoBotaoSalvar}>Atualizar Senha</Text></TouchableOpacity></View></KeyboardAvoidingView></Modal>
         <Modal animationType="slide" transparent={true} visible={modalCategoriasVisivel} onRequestClose={() => setModalCategoriasVisivel(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}><View style={styles.modalConteudo}><View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Gerenciar Categorias</Text><TouchableOpacity onPress={() => setModalCategoriasVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View><Text style={styles.labelPequeno}>Nova Categoria:</Text><View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15}}><TextInput style={[styles.input, {flex: 1, marginRight: 10, paddingVertical: 10}]} placeholder="Ex: Faculdade" value={novaCategoriaNome} onChangeText={setNovaCategoriaNome} /><TouchableOpacity style={styles.btnAdicionarCategoria} onPress={adicionarCategoria}><Feather name="plus" size={20} color="#FFF" /></TouchableOpacity></View><Text style={styles.labelPequeno}>Escolha a Cor:</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>{coresDisponiveis.map(cor => (<TouchableOpacity key={cor} style={[styles.bolinhaCor, {backgroundColor: cor}, novaCategoriaCor === cor && styles.bolinhaCorAtiva]} onPress={() => setNovaCategoriaCor(cor)} />))}</ScrollView><Text style={styles.labelPequeno}>Suas Categorias:</Text><FlatList data={categorias} keyExtractor={item => item.id} style={{maxHeight: 300}} renderItem={({item}) => (<View style={styles.catEditRow}><View style={{flexDirection: 'row', alignItems: 'center'}}><View style={{width: 12, height: 12, borderRadius: 6, backgroundColor: item.cor, marginRight: 10}} /><Text style={styles.catEditNome}>{item.nome}</Text></View><TouchableOpacity onPress={() => excluirCategoria(item.id, item.nome)} style={{padding: 5}}><Feather name="trash-2" size={20} color="#EF4444" /></TouchableOpacity></View>)} /></View></KeyboardAvoidingView></Modal>
         
-        {/* Menu Lateral com Importar CSV */}
         <Modal visible={menuAberto} transparent={true} animationType="fade" onRequestClose={() => setMenuAberto(false)}>
           <View style={styles.drawerOverlay}>
             <View style={styles.drawerContent}>
@@ -996,13 +987,10 @@ function MainApp() {
               <ScrollView>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setAbaAtual('visao_anual'), 200); }}><Feather name="bar-chart-2" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Visão Anual</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalCategoriasVisivel(true), 200); }}><Feather name="tag" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Gerenciar Categorias</Text></TouchableOpacity>
-                
-                {/* Botão posicionado exatamente acima de Exportar Relatórios */}
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalImportarVisivel(true), 200); }}>
                   <Feather name="upload-cloud" size={22} color="#10B981" />
                   <Text style={[styles.drawerItemText, { color: '#10B981', fontWeight: 'bold' }]}>Importar CSV (Inteligente)</Text>
                 </TouchableOpacity>
-
                 <TouchableOpacity style={styles.drawerItem}><Feather name="download" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Exportar Relatórios</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem}><Feather name="settings" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Configurações</Text></TouchableOpacity>
               </ScrollView>
@@ -1209,63 +1197,7 @@ const styles = StyleSheet.create({
   textoFecharCal: { color: '#64748B', fontWeight: 'bold', fontSize: 13 }
 });
 
-export default function App() {
-  const [session, setSession] = React.useState(null);
-  const [emailAuth, setEmailAuth] = React.useState('');
-  const [passwordAuth, setPasswordAuth] = React.useState('');
-  const [loadingAuth, setLoadingAuth] = React.useState(false);
-
-  React.useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-  }, []);
-
-  async function handleSignUp() {
-    setLoadingAuth(true);
-    const { error } = await supabase.auth.signUp({ email: emailAuth, password: passwordAuth });
-    if (error) alert('Erro ao criar conta: ' + error.message);
-    else alert('Conta criada com sucesso! Já pode entrar.');
-    setLoadingAuth(false);
-  }
-
-  async function handleLogin() {
-    setLoadingAuth(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: emailAuth, password: passwordAuth });
-    if (error) alert('Erro ao entrar: ' + error.message);
-    setLoadingAuth(false);
-  }
-
-  if (!session) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#f8fafc' }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: '#1e293b' }}>
-          App Finanças
-        </Text>
-        <TextInput
-          style={{ backgroundColor: '#fff', padding: 15, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#cbd5e1' }}
-          placeholder="E-mail"
-          value={emailAuth}
-          onChangeText={setEmailAuth}
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={{ backgroundColor: '#fff', padding: 15, borderRadius: 8, marginBottom: 15, borderWidth: 1, borderColor: '#cbd5e1' }}
-          placeholder="Senha"
-          value={passwordAuth}
-          onChangeText={setPasswordAuth}
-          secureTextEntry
-        />
-        <TouchableOpacity onPress={handleLogin} style={{ backgroundColor: '#3B82F6', padding: 15, borderRadius: 8, marginBottom: 10 }}>
-          <Text style={{ color: '#fff', textAlign: 'center', fontWeight: 'bold', fontSize: 16 }}>
-            {loadingAuth ? 'A processar...' : 'Entrar'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleSignUp} style={{ padding: 15 }}>
-          <Text style={{ color: '#3B82F6', textAlign: 'center', fontWeight: 'bold' }}>Criar Nova Conta</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return <MainApp />;
+export default function App({ session }) {
+  if (!session) return null; // A sessão é injetada a partir da barreira de login principal
+  return <MainApp session={session} />;
 }
