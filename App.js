@@ -1215,29 +1215,33 @@ const styles = StyleSheet.create({
   btnFecharCal: { marginTop: 15, paddingVertical: 8, paddingHorizontal: 20, backgroundColor: '#F1F5F9', borderRadius: 10 },
   textoFecharCal: { color: '#64748B', fontWeight: 'bold', fontSize: 13 }
 });
+export default function App() {
+  const [session, setSession] = React.useState(null);
+  const [emailAuth, setEmailAuth] = React.useState('');
+  const [passwordAuth, setPasswordAuth] = React.useState('');
+  const [loadingAuth, setLoadingAuth] = React.useState(false);
 
-export default function App({ session }) {
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+  }, []);
+
+  async function handleSignUp() {
+    setLoadingAuth(true);
+    const { error } = await supabase.auth.signUp({ email: emailAuth, password: passwordAuth });
+    if (error) alert('Erro ao criar conta: ' + error.message);
+    else alert('Conta criada com sucesso! Já pode entrar.');
+    setLoadingAuth(false);
+  }
+
+  async function handleLogin() {
+    setLoadingAuth(true);
+    const { error } = await supabase.auth.signInWithPassword({ email: emailAuth, password: passwordAuth });
+    if (error) alert('Erro ao entrar: ' + error.message);
+    setLoadingAuth(false);
+  }
+
   if (!session) {
-    // Restaurando a tela de Login Original!
-    const [emailAuth, setEmailAuth] = React.useState('');
-    const [passwordAuth, setPasswordAuth] = React.useState('');
-    const [loadingAuth, setLoadingAuth] = React.useState(false);
-
-    async function handleSignUp() {
-      setLoadingAuth(true);
-      const { error } = await supabase.auth.signUp({ email: emailAuth, password: passwordAuth });
-      if (error) alert('Erro ao criar conta: ' + error.message);
-      else alert('Conta criada com sucesso! Já pode entrar.');
-      setLoadingAuth(false);
-    }
-
-    async function handleLogin() {
-      setLoadingAuth(true);
-      const { error } = await supabase.auth.signInWithPassword({ email: emailAuth, password: passwordAuth });
-      if (error) alert('Erro ao entrar: ' + error.message);
-      setLoadingAuth(false);
-    }
-
     return (
       <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#f8fafc' }}>
         <Text style={{ fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: '#1e293b' }}>
