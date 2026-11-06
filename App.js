@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, TouchableOpacity, Alert, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Switch, RefreshControl } from 'react-native';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 function MainApp({ session }) {
   const userId = session.user.id;
@@ -114,8 +115,9 @@ function MainApp({ session }) {
       
       const colunas = linha.split(';'); 
       if (colunas.length >= 4) {
-        const diaMes = colunas[0]?.trim() || '01/10';
-        const dataLinhaStr = `${diaMes}/${anoCorrente}`;
+        const diaMes = colunas[0]?.trim() || '01/01';
+        // A data no CSV é sempre considerada a DATA DA COMPRA absoluta
+        const dataCompraStr = `${diaMes}/${anoCorrente}`;
         const descStr = colunas[1]?.trim() || 'Importado';
         const parcelaInfoStr = colunas[2]?.trim() || 'Única'; 
         
@@ -124,10 +126,8 @@ function MainApp({ session }) {
         let valorParcelaNum = parseFloat(valorParcelaStr.replace(/[R$\s-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
 
         let totalParcelas = 1;
-        let parcelaAtual = 1;
         if (parcelaInfoStr.toLowerCase() !== 'única' && parcelaInfoStr.includes('/')) {
           const partesParcela = parcelaInfoStr.split('/');
-          parcelaAtual = parseInt(partesParcela[0], 10) || 1;
           totalParcelas = parseInt(partesParcela[1], 10) || 1;
         }
 
@@ -148,31 +148,24 @@ function MainApp({ session }) {
             tipo: tipoTransacao,
             modalidade: 'a_vista',
             categoria: catSugerida,
-            dataCompra: dataLinhaStr,
-            dataVencimento: dataLinhaStr,
+            dataCompra: dataCompraStr,
+            dataVencimento: somarMesesData(dataCompraStr, 1), // Vencimento exato no mês posterior
             fixado: false
           });
         } else {
-          const mesesAjusteInicio = parcelaAtual - 1;
-          const partesData = dataLinhaStr.split('/');
-          let dataInicioCompra = dataLinhaStr;
-          if (partesData.length === 3) {
-            let dInicio = new Date(parseInt(partesData[2], 10), parseInt(partesData[1], 10) - 1 - mesesAjusteInicio, parseInt(partesData[0], 10));
-            dataInicioCompra = `${dInicio.getDate().toString().padStart(2, '0')}/${(dInicio.getMonth() + 1).toString().padStart(2, '0')}/${dInicio.getFullYear()}`;
-          }
-
-          for (let p = 0; p < totalParcelas; p++) {
-            const dataVencParcela = somarMesesData(dataInicioCompra, p);
+          // Gera todas as parcelas do ciclo. A parcela 1 cobra no mês + 1, parcela 2 no mês + 2, etc.
+          for (let p = 1; p <= totalParcelas; p++) {
+            const dataVencParcela = somarMesesData(dataCompraStr, p);
             listaProcessada.push({
               id: `${Date.now()}_${idx}_${p}`,
-              descricao: `${descStr} [${p + 1}/${totalParcelas}]`,
+              descricao: `${descStr} [${p}/${totalParcelas}]`,
               valor: valorParcelaNum,
               tipo: tipoTransacao,
               modalidade: 'parcelada',
-              parcelasInfo: `${p + 1}/${totalParcelas}`,
+              parcelasInfo: `${p}/${totalParcelas}`,
               categoria: catSugerida,
-              dataCompra: dataInicioCompra,
-              dataVencimento: dataVencParcela,
+              dataCompra: dataCompraStr, // Mantém a data original como base do histórico
+              dataVencimento: dataVencParcela, // Distribui as faturas mensalmente
               fixado: false
             });
           }
@@ -181,7 +174,7 @@ function MainApp({ session }) {
     });
 
     setTransacoesPreview(listaProcessada);
-    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas com sucesso! Revise a prévia.`);
+    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas no ciclo! Revise a prévia.`);
   };
 
   const confirmarImportacaoLote = () => {
@@ -200,7 +193,7 @@ function MainApp({ session }) {
     setModalImportarVisivel(false);
     setConteudoCsvInput('');
     setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação concluída e salva na nuvem!') : Alert.alert('Sucesso', 'Importação salva na nuvem!');
+    Platform.OS === 'web' ? window.alert('Importação concluída e salva na nuvem! Visualizando cobranças.') : Alert.alert('Sucesso', 'Importação salva na nuvem!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
@@ -245,7 +238,7 @@ function MainApp({ session }) {
   const [calAno, setCalAno] = useState(anoCorrente);
 
   const nomesMeses = { '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril', '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto', '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro' };
-  const mesesAbreviados = [{ num: 1, nome: 'Jan' }, { num: 2, nome: 'Fev' }, { num: 3, nome: 'Mar' }, { num: 4, nome: 'Abr' }, { num: 5, nome: 'Mai' }, { num: 6, nome: 'Jun' }, { num: 7, nome: 'Jul' }, { num: 8, 'nome': 'Ago' }, { num: 9, nome: 'Set' }, { num: 10, nome: 'Out' }, { num: 11, nome: 'Nov' }, { num: 12, nome: 'Dez' }];
+  const mesesAbreviados = [{ num: 1, nome: 'Jan' }, { num: 2, nome: 'Fev' }, { num: 3, nome: 'Mar' }, { num: 4, nome: 'Abr' }, { num: 5, nome: 'Mai' }, { num: 6, nome: 'Jun' }, { num: 7, nome: 'Jul' }, { num: 8, nome: 'Ago' }, { num: 9, nome: 'Set' }, { num: 10, nome: 'Out' }, { num: 11, nome: 'Nov' }, { num: 12, nome: 'Dez' }];
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -836,11 +829,14 @@ function MainApp({ session }) {
                       <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text>
-                          <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento} • {item.categoria} • {item.modalidade}</Text>
+                          <Text style={{ fontSize: 11, color: '#64748B' }}>📅 Compra: {item.dataCompra} • Venc: {item.dataVencimento}</Text>
+                          <Text style={{ fontSize: 11, color: '#64748B' }}>{item.categoria} • {item.modalidade}</Text>
                         </View>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#B91C1C' }}>
-                          - R$ {item.valor.toFixed(2)}
-                        </Text>
+                        <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+                          <Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>
+                            {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
+                          </Text>
+                        </View>
                       </View>
                     ))}
                   </ScrollView>
@@ -991,7 +987,6 @@ function MainApp({ session }) {
         <Modal animationType="slide" transparent={true} visible={modalSegurancaVisivel} onRequestClose={() => setModalSegurancaVisivel(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}><View style={styles.modalConteudo}><View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Segurança</Text><TouchableOpacity onPress={() => setModalSegurancaVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View><View style={styles.biometriaRow}><View style={{flexDirection: 'row', alignItems: 'center'}}><Feather name="smartphone" size={24} color="#1E293B" style={{marginRight: 10}} /><Text style={styles.labelBiometria}>Biometria / Face ID</Text></View><Switch trackColor={{ false: "#CBD5E1", true: "#10B981" }} thumbColor="#FFFFFF" ios_backgroundColor="#CBD5E1" onValueChange={() => setBiometriaAtiva(!biometriaAtiva)} value={biometriaAtiva} /></View><Text style={styles.dicaBiometria}>Use sua digital ou rosto para entrar no app sem precisar digitar a senha toda vez.</Text><Text style={[styles.sectionTitle, {marginTop: 20}]}>Trocar Senha</Text><Text style={styles.labelPequeno}>Senha Atual</Text><TextInput style={[styles.input, {marginBottom: 10}]} placeholder="••••••••" secureTextEntry={true} /><Text style={styles.labelPequeno}>Nova Senha</Text><TextInput style={[styles.input, {marginBottom: 10}]} placeholder="••••••••" secureTextEntry={true} /><TouchableOpacity style={styles.botaoSalvar} onPress={() => { Platform.OS === 'web' ? window.alert('Senha atualizada com segurança!') : Alert.alert('Segurança', 'Senha atualizada com segurança!'); setModalSegurancaVisivel(false); }}><Text style={styles.textoBotaoSalvar}>Atualizar Senha</Text></TouchableOpacity></View></KeyboardAvoidingView></Modal>
         <Modal animationType="slide" transparent={true} visible={modalCategoriasVisivel} onRequestClose={() => setModalCategoriasVisivel(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}><View style={styles.modalConteudo}><View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Gerenciar Categorias</Text><TouchableOpacity onPress={() => setModalCategoriasVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View><Text style={styles.labelPequeno}>Nova Categoria:</Text><View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15}}><TextInput style={[styles.input, {flex: 1, marginRight: 10, paddingVertical: 10}]} placeholder="Ex: Faculdade" value={novaCategoriaNome} onChangeText={setNovaCategoriaNome} /><TouchableOpacity style={styles.btnAdicionarCategoria} onPress={adicionarCategoria}><Feather name="plus" size={20} color="#FFF" /></TouchableOpacity></View><Text style={styles.labelPequeno}>Escolha a Cor:</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>{coresDisponiveis.map(cor => (<TouchableOpacity key={cor} style={[styles.bolinhaCor, {backgroundColor: cor}, novaCategoriaCor === cor && styles.bolinhaCorAtiva]} onPress={() => setNovaCategoriaCor(cor)} />))}</ScrollView><Text style={styles.labelPequeno}>Suas Categorias:</Text><FlatList data={categorias} keyExtractor={item => item.id} style={{maxHeight: 300}} renderItem={({item}) => (<View style={styles.catEditRow}><View style={{flexDirection: 'row', alignItems: 'center'}}><View style={{width: 12, height: 12, borderRadius: 6, backgroundColor: item.cor, marginRight: 10}} /><Text style={styles.catEditNome}>{item.nome}</Text></View><TouchableOpacity onPress={() => excluirCategoria(item.id, item.nome)} style={{padding: 5}}><Feather name="trash-2" size={20} color="#EF4444" /></TouchableOpacity></View>)} /></View></KeyboardAvoidingView></Modal>
         
-        {/* Menu Lateral com Importar CSV */}
         <Modal visible={menuAberto} transparent={true} animationType="fade" onRequestClose={() => setMenuAberto(false)}>
           <View style={styles.drawerOverlay}>
             <View style={styles.drawerContent}>
@@ -1003,13 +998,10 @@ function MainApp({ session }) {
               <ScrollView>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setAbaAtual('visao_anual'), 200); }}><Feather name="bar-chart-2" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Visão Anual</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalCategoriasVisivel(true), 200); }}><Feather name="tag" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Gerenciar Categorias</Text></TouchableOpacity>
-                
-                {/* Botão posicionado exatamente acima de Exportar Relatórios */}
                 <TouchableOpacity style={styles.drawerItem} onPress={() => { setMenuAberto(false); setTimeout(() => setModalImportarVisivel(true), 200); }}>
                   <Feather name="upload-cloud" size={22} color="#10B981" />
                   <Text style={[styles.drawerItemText, { color: '#10B981', fontWeight: 'bold' }]}>Importar CSV (Inteligente)</Text>
                 </TouchableOpacity>
-
                 <TouchableOpacity style={styles.drawerItem}><Feather name="download" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Exportar Relatórios</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem}><Feather name="settings" size={22} color="#64748B" /><Text style={styles.drawerItemText}>Configurações</Text></TouchableOpacity>
               </ScrollView>
@@ -1215,33 +1207,28 @@ const styles = StyleSheet.create({
   btnFecharCal: { marginTop: 15, paddingVertical: 8, paddingHorizontal: 20, backgroundColor: '#F1F5F9', borderRadius: 10 },
   textoFecharCal: { color: '#64748B', fontWeight: 'bold', fontSize: 13 }
 });
-export default function App() {
-  const [session, setSession] = React.useState(null);
-  const [emailAuth, setEmailAuth] = React.useState('');
-  const [passwordAuth, setPasswordAuth] = React.useState('');
-  const [loadingAuth, setLoadingAuth] = React.useState(false);
 
-  React.useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-  }, []);
-
-  async function handleSignUp() {
-    setLoadingAuth(true);
-    const { error } = await supabase.auth.signUp({ email: emailAuth, password: passwordAuth });
-    if (error) alert('Erro ao criar conta: ' + error.message);
-    else alert('Conta criada com sucesso! Já pode entrar.');
-    setLoadingAuth(false);
-  }
-
-  async function handleLogin() {
-    setLoadingAuth(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: emailAuth, password: passwordAuth });
-    if (error) alert('Erro ao entrar: ' + error.message);
-    setLoadingAuth(false);
-  }
-
+export default function App({ session }) {
   if (!session) {
+    const [emailAuth, setEmailAuth] = React.useState('');
+    const [passwordAuth, setPasswordAuth] = React.useState('');
+    const [loadingAuth, setLoadingAuth] = React.useState(false);
+
+    async function handleSignUp() {
+      setLoadingAuth(true);
+      const { error } = await supabase.auth.signUp({ email: emailAuth, password: passwordAuth });
+      if (error) alert('Erro ao criar conta: ' + error.message);
+      else alert('Conta criada com sucesso! Já pode entrar.');
+      setLoadingAuth(false);
+    }
+
+    async function handleLogin() {
+      setLoadingAuth(true);
+      const { error } = await supabase.auth.signInWithPassword({ email: emailAuth, password: passwordAuth });
+      if (error) alert('Erro ao entrar: ' + error.message);
+      setLoadingAuth(false);
+    }
+
     return (
       <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#f8fafc' }}>
         <Text style={{ fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: '#1e293b' }}>
