@@ -79,23 +79,23 @@ function MainApp({ session }) {
   const atualizarTransacoes = async (novasTransacoes) => {
     setTransacoes(novasTransacoes);
     try { await supabase.from('cloud_state').update({ transacoes: novasTransacoes }).eq('user_id', userId); } 
-    catch (e) { console.log('Erro ao salvar transações', e); }
+    catch (e) { console.log('Erro ao salvar transações na nuvem', e); }
   };
 
   const atualizarCategorias = async (novasCategorias) => {
     setCategorias(novasCategorias);
     try { await supabase.from('cloud_state').update({ categorias: novasCategorias }).eq('user_id', userId); } 
-    catch (e) { console.log('Erro ao salvar categorias', e); }
+    catch (e) { console.log('Erro ao salvar categorias na nuvem', e); }
   };
 
   const atualizarMetas = async (novasMetas) => {
     setMetas(novasMetas);
     try { await supabase.from('cloud_state').update({ metas: novasMetas }).eq('user_id', userId); } 
-    catch (e) { console.log('Erro ao salvar metas', e); }
+    catch (e) { console.log('Erro ao salvar metas na nuvem', e); }
   };
 
   const somarMesesData = (dataStr, qtdMeses) => {
-    const partes = dataStr.split('/');
+    const partes = (dataStr || '').split('/');
     if (partes.length !== 3) return dataStr;
     let dia = parseInt(partes[0], 10);
     let mes = parseInt(partes[1], 10) - 1 + qtdMeses;
@@ -106,7 +106,7 @@ function MainApp({ session }) {
   };
 
   const processarTextoCsv = (texto) => {
-    const linhas = texto.split('\n');
+    const linhas = (texto || '').split('\n');
     let listaProcessada = [];
 
     linhas.forEach((linha, idx) => {
@@ -133,9 +133,9 @@ function MainApp({ session }) {
 
         let catSugerida = 'Cartão de Crédito';
         const descLower = descStr.toLowerCase();
-        if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto')) catSugerida = 'Lazer';
-        else if (descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude')) catSugerida = 'Alimentação';
-        else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua')) catSugerida = 'Moradia';
+        if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
+        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude') || descLower.includes('saude online') || descLower.includes('burger king')) catSugerida = 'Alimentação';
+        else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
         else if (descLower.includes('salario') || descLower.includes('pix recebido')) catSugerida = 'Renda';
 
         let tipoTransacao = isNegativo || descLower.includes('estorno') ? 'entrada' : 'saida';
@@ -164,7 +164,7 @@ function MainApp({ session }) {
     });
 
     setTransacoesPreview(listaProcessada);
-    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas! Revise a prévia.`);
+    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas no ciclo! Revise a prévia.`);
   };
 
   const confirmarImportacaoLote = () => {
@@ -173,16 +173,39 @@ function MainApp({ session }) {
     atualizarTransacoes(novas);
 
     if (transacoesPreview.length > 0) {
-      const primeiraData = transacoesPreview[0].dataVencimento;
+      const primeiraData = transacoesPreview[0].dataVencimento || '';
       const partes = primeiraData.split('/');
-      if (partes.length === 3) setMesSelecionado(`${partes[1]}/${partes[2]}`);
+      if (partes.length === 3) {
+        setMesSelecionado(`${partes[1]}/${partes[2]}`);
+      }
     }
 
-    setModalImportarVisivel(false); setConteudoCsvInput(''); setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação concluída!') : Alert.alert('Sucesso', 'Importação concluída!');
+    setModalImportarVisivel(false);
+    setConteudoCsvInput('');
+    setTransacoesPreview([]);
+    Platform.OS === 'web' ? window.alert('Importação concluída e salva na nuvem! Visualizando cobranças.') : Alert.alert('Sucesso', 'Importação salva na nuvem!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
+  const [idEditandoMeta, setIdEditandoMeta] = useState(null);
+  const [novaMetaTitulo, setNovaMetaTitulo] = useState('');
+  const [novaMetaAlvo, setNovaMetaAlvo] = useState('');
+  const [novaMetaValorAtual, setNovaMetaValorAtual] = useState('');
+  const [novaMetaCategoria, setNovaMetaCategoria] = useState('Outros');
+  const [novaMetaModalidade, setNovaMetaModalidade] = useState('a_vista');
+  const [novaMetaMeioPagamento, setNovaMetaMeioPagamento] = useState('Pix');
+  const [novaMetaQtdParcelas, setNovaMetaQtdParcelas] = useState('2');
+  const [novaMetaOrigemConta, setNovaMetaOrigemConta] = useState('Conta Corrente');
+  const [novaMetaDataAlvo, setNovaMetaDataAlvo] = useState('');
+
+  const meiosPagamento = ['Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro', 'Boleto'];
+  const contasOrigem = ['Conta Corrente', 'Nubank', 'Itaú', 'Inter', 'Outros'];
+
+  const [modalDepositarVisivel, setModalDepositarVisivel] = useState(false);
+  const [metaSelecionada, setMetaSelecionada] = useState(null);
+  const [valorDeposito, setValorDeposito] = useState('');
+  const [origemDeposito, setOrigemDeposito] = useState('carteira');
+
   const [modalCategoriasVisivel, setModalCategoriasVisivel] = useState(false);
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
   const [novaCategoriaCor, setNovaCategoriaCor] = useState('#3B82F6');
@@ -229,24 +252,25 @@ function MainApp({ session }) {
     return 0;
   });
 
-  const receitas = transacoesDoMes.filter(t => t.tipo === 'entrada').reduce((acc, t) => acc + t.valor, 0);
-  const despesas = transacoesDoMes.filter(t => t.tipo === 'saida').reduce((acc, t) => acc + t.valor, 0);
-  const despesasPagas = transacoesDoMes.filter(t => t.tipo === 'saida' && t.pago).reduce((acc, t) => acc + t.valor, 0);
+  // PROTEÇÃO EXTRA: O Number() impede que dados salvos como string crashem o .toFixed()
+  const receitas = transacoesDoMes.filter(t => t.tipo === 'entrada').reduce((acc, t) => acc + Number(t.valor || 0), 0);
+  const despesas = transacoesDoMes.filter(t => t.tipo === 'saida').reduce((acc, t) => acc + Number(t.valor || 0), 0);
+  const despesasPagas = transacoesDoMes.filter(t => t.tipo === 'saida' && t.pago).reduce((acc, t) => acc + Number(t.valor || 0), 0);
   const despesasPendentes = despesas - despesasPagas;
 
   const saldo = receitas - despesas;
   const porcentagemDespesa = receitas > 0 ? (despesas / receitas) * 100 : (despesas > 0 ? 100 : 0);
   const porcentagemLimitada = Math.min(porcentagemDespesa, 100);
 
-  const mesAtualNome = nomesMeses[mesSelecionado.split('/')[0]];
-  const anoAtual = mesSelecionado.split('/')[1];
+  const mesAtualNome = nomesMeses[mesSelecionado.split('/')[0]] || 'Mês';
+  const anoAtual = mesSelecionado.split('/')[1] || anoCorrente;
 
   const calcularDespesasPorCategoria = () => {
     let mapaCategorias = {};
     transacoesDoMes.forEach(t => {
       if (t.tipo === 'saida' && !t.pago) { 
         if (!mapaCategorias[t.categoria]) mapaCategorias[t.categoria] = 0;
-        mapaCategorias[t.categoria] += t.valor;
+        mapaCategorias[t.categoria] += Number(t.valor || 0);
       }
     });
     return Object.keys(mapaCategorias).map(cat => ({
@@ -257,27 +281,28 @@ function MainApp({ session }) {
   };
   const despesasAgrupadas = calcularDespesasPorCategoria();
 
-  // Hashtag Parser Inteligente
+  // PROTEÇÃO DE ESTRUTURA PARA HASHTAGS
   const renderDescricaoComHashtag = (descricao, pago) => {
-    const palavras = descricao.split(' ');
+    const texto = descricao || 'Sem descrição';
+    const palavras = texto.split(' ');
     return (
       <Text style={[styles.listCardTitle, pago && { textDecorationLine: 'line-through', color: '#94A3B8' }]}>
         {palavras.map((palavra, index) => {
           if (palavra.startsWith('#')) {
             return <Text key={index} style={{ color: '#3B82F6', fontWeight: 'bold' }}>{palavra} </Text>;
           }
-          return palavra + ' ';
+          return <Text key={index}>{palavra} </Text>;
         })}
       </Text>
     );
   };
 
-  const abrirSeletorMes = () => { setAnoTemp(parseInt(anoAtual)); setModalMesVisivel(true); };
+  const abrirSeletorMes = () => { setAnoTemp(parseInt(anoAtual) || anoCorrente); setModalMesVisivel(true); };
   const escolherMes = (mesNum) => { setMesSelecionado(`${mesNum.toString().padStart(2, '0')}/${anoTemp}`); setModalMesVisivel(false); };
   
   const abrirCalendario = (campo) => { 
     setCampoDataAtivo(campo); 
-    let dataReferencia = campo === 'meta_alvo' ? dataHoje.toLocaleDateString('pt-BR') : novaDataCompra;
+    let dataReferencia = campo === 'meta_alvo' ? dataHoje.toLocaleDateString('pt-BR') : (novaDataCompra || dataHoje.toLocaleDateString('pt-BR'));
     const partes = dataReferencia.split('/');
     if (partes.length === 3) { setCalMes(parseInt(partes[1], 10)); setCalAno(parseInt(partes[2], 10)); }
     setCalendarioVisivel(true); 
@@ -286,7 +311,7 @@ function MainApp({ session }) {
   const selecionarDia = (dia) => {
     const dataFormatada = `${dia.toString().padStart(2, '0')}/${calMes.toString().padStart(2, '0')}/${calAno}`;
     if (campoDataAtivo === 'meta_alvo') {
-      // Usado para metas
+      setNovaMetaDataAlvo(dataFormatada);
     } else if (campoDataAtivo === 'compra') { 
       setNovaDataCompra(dataFormatada); 
       if (!novaDataVencimento || novoTipo === 'entrada') setNovaDataVencimento(dataFormatada); 
@@ -313,7 +338,7 @@ function MainApp({ session }) {
 
   const abrirEdicao = (item) => {
     setIdEditando(item.id); setNovoTipo(item.tipo); setNovaModalidade(item.modalidade || 'a_vista'); setNovaDescricao(item.descricao);
-    setNovaCategoriaForm(item.categoria); setNovoValor(item.valor.toString()); setNovaDataCompra(item.dataCompra); setNovaDataVencimento(item.dataVencimento);
+    setNovaCategoriaForm(item.categoria); setNovoValor(item.valor ? item.valor.toString() : '0'); setNovaDataCompra(item.dataCompra); setNovaDataVencimento(item.dataVencimento);
     setModalVisivel(true);
   };
 
@@ -373,77 +398,82 @@ function MainApp({ session }) {
   };
 
   const mostrarDetalhes = (item) => {
-    let msg = `Descrição: ${item.descricao}\nCategoria: ${item.categoria}\nData Compra: ${item.dataCompra}\nVencimento: ${item.dataVencimento}\nValor: R$ ${item.valor.toFixed(2)}\nStatus: ${item.pago ? 'Paga ✅' : 'Pendente'}`;
+    let msg = `Descrição: ${item.descricao}\nCategoria: ${item.categoria}\nData Compra: ${item.dataCompra}\nVencimento: ${item.dataVencimento}\nValor: R$ ${Number(item.valor || 0).toFixed(2)}\nStatus: ${item.pago ? 'Paga ✅' : 'Pendente'}`;
     if (item.modalidade) { const rotulos = { a_vista: 'À Vista', parcelada: 'Parcelada', fixa: 'Fixa / Recorrente' }; msg += `\nTipo: ${rotulos[item.modalidade] || item.modalidade}`; }
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert("Detalhes", msg, [{ text: "Fechar", style: "default" }]);
   };
 
-  const renderDashboard = () => (
-    <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-      <View style={styles.monthSelectorContainer}>
-        <TouchableOpacity style={styles.monthPill} onPress={abrirSeletorMes}>
-          <Text style={styles.monthPillText}>{mesAtualNome} {anoAtual}</Text>
-          <Feather name="chevron-down" size={16} color="#1E293B" style={{ marginLeft: 5 }} />
-        </TouchableOpacity>
-      </View>
+  const renderDashboard = () => {
+    // Calculo do donut protegido contra NaN
+    const rotDeg = isNaN(porcentagemLimitada) ? 0 : Math.min((porcentagemLimitada / 100) * 360, 360);
 
-      <View style={styles.donutContainer}>
-        <View style={styles.donutWrapper}>
-          <View style={[styles.donutRingBackground, { borderColor: '#F1F5F9' }]} />
-          <View style={[styles.donutRingForeground, { borderColor: '#3B82F6', transform: [{ rotate: `${Math.min((porcentagemLimitada / 100) * 360, 360)}deg` }] }]} />
-          <View style={styles.donutInner}>
-            <Text style={styles.donutSubText}>Saldo Livre</Text>
-            <Text style={styles.donutMainText}>R$ {saldo >= 0 ? saldo.toFixed(2) : '0.00'}</Text>
+    return (
+      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <View style={styles.monthSelectorContainer}>
+          <TouchableOpacity style={styles.monthPill} onPress={abrirSeletorMes}>
+            <Text style={styles.monthPillText}>{mesAtualNome} {anoAtual}</Text>
+            <Feather name="chevron-down" size={16} color="#1E293B" style={{ marginLeft: 5 }} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.donutContainer}>
+          <View style={styles.donutWrapper}>
+            <View style={[styles.donutRingBackground, { borderColor: '#F1F5F9' }]} />
+            <View style={[styles.donutRingForeground, { borderColor: '#3B82F6', transform: [{ rotate: rotDeg + 'deg' }] }]} />
+            <View style={styles.donutInner}>
+              <Text style={styles.donutSubText}>Saldo Livre</Text>
+              <Text style={styles.donutMainText}>R$ {saldo >= 0 ? saldo.toFixed(2) : '0.00'}</Text>
+            </View>
+          </View>
+          <Text style={styles.donutLegenda}>Você usou {isNaN(porcentagemLimitada) ? 0 : porcentagemLimitada.toFixed(0)}% das suas receitas este mês.</Text>
+        </View>
+
+        <View style={styles.statusPagamentoContainer}>
+          <View style={[styles.pagamentoCard, { borderLeftColor: '#F59E0B' }]}>
+            <Text style={styles.pagamentoLabel}>Pendentes</Text>
+            <Text style={[styles.pagamentoValor, { color: '#F59E0B' }]}>R$ {despesasPendentes.toFixed(2)}</Text>
+          </View>
+          <View style={[styles.pagamentoCard, { borderLeftColor: '#10B981' }]}>
+            <Text style={styles.pagamentoLabel}>Pagas</Text>
+            <Text style={[styles.pagamentoValor, { color: '#10B981' }]}>R$ {despesasPagas.toFixed(2)}</Text>
           </View>
         </View>
-        <Text style={styles.donutLegenda}>Você usou {porcentagemLimitada.toFixed(0)}% das suas receitas este mês.</Text>
-      </View>
 
-      <View style={styles.statusPagamentoContainer}>
-        <View style={[styles.pagamentoCard, { borderLeftColor: '#F59E0B' }]}>
-          <Text style={styles.pagamentoLabel}>Pendentes</Text>
-          <Text style={[styles.pagamentoValor, { color: '#F59E0B' }]}>R$ {despesasPendentes.toFixed(2)}</Text>
-        </View>
-        <View style={[styles.pagamentoCard, { borderLeftColor: '#10B981' }]}>
-          <Text style={styles.pagamentoLabel}>Pagas</Text>
-          <Text style={[styles.pagamentoValor, { color: '#10B981' }]}>R$ {despesasPagas.toFixed(2)}</Text>
-        </View>
-      </View>
-
-      <View style={styles.categoriasSection}>
-        <Text style={styles.sectionTitle}>Maiores Gastos</Text>
-        <View style={styles.categoriasListContainer}>
-          {despesasAgrupadas.length === 0 ? (<Text style={styles.textoVazio}>Sem gastos pendentes.</Text>) : (
-            despesasAgrupadas.map((item, index) => { 
-              const catObj = categorias.find(c => c.nome === item.nome); 
-              const cor = catObj ? catObj.cor : '#94A3B8'; 
-              const icone = catObj ? catObj.icone : '🏷️';
-              return (
-                <View key={index} style={styles.catRowAdvanced}>
-                  <View style={styles.catRowTop}>
-                    <View style={styles.catLeftInfo}>
-                      <View style={[styles.catIconContainer, { backgroundColor: cor + '20' }]}>
-                        <Text style={styles.catEmoji}>{icone}</Text>
+        <View style={styles.categoriasSection}>
+          <Text style={styles.sectionTitle}>Maiores Gastos</Text>
+          <View style={styles.categoriasListContainer}>
+            {despesasAgrupadas.length === 0 ? (<Text style={styles.textoVazio}>Sem gastos pendentes.</Text>) : (
+              despesasAgrupadas.map((item, index) => { 
+                const catObj = categorias.find(c => c.nome === item.nome); 
+                const corHex = catObj && catObj.cor ? catObj.cor : '#94A3B8'; 
+                const icone = catObj && catObj.icone ? catObj.icone : '🏷️';
+                return (
+                  <View key={index} style={styles.catRowAdvanced}>
+                    <View style={styles.catRowTop}>
+                      <View style={styles.catLeftInfo}>
+                        <View style={[styles.catIconContainer, { backgroundColor: corHex + '20' }]}>
+                          <Text style={styles.catEmoji}>{icone}</Text>
+                        </View>
+                        <Text style={styles.catNomeAdvanced}>{item.nome}</Text>
                       </View>
-                      <Text style={styles.catNomeAdvanced}>{item.nome}</Text>
+                      <View style={styles.catRightInfo}>
+                        <Text style={styles.catValorAdvanced}>R$ {item.total.toFixed(2)}</Text>
+                        <Text style={styles.catPercentAdvanced}>{isNaN(item.porcentagem) ? 0 : item.porcentagem.toFixed(0)}%</Text>
+                      </View>
                     </View>
-                    <View style={styles.catRightInfo}>
-                      <Text style={styles.catValorAdvanced}>R$ {item.total.toFixed(2)}</Text>
-                      <Text style={styles.catPercentAdvanced}>{item.porcentagem.toFixed(0)}%</Text>
+                    <View style={styles.catProgressBarBg}>
+                      <View style={[styles.catProgressBarFill, { backgroundColor: corHex, width: `${isNaN(item.porcentagem) ? 0 : item.porcentagem}%` }]} />
                     </View>
                   </View>
-                  <View style={styles.catProgressBarBg}>
-                    <View style={[styles.catProgressBarFill, { backgroundColor: cor, width: `${item.porcentagem}%` }]} />
-                  </View>
-                </View>
-              ) 
-            })
-          )}
+                ) 
+              })
+            )}
+          </View>
         </View>
-      </View>
-      <View style={{height: 100}} /> 
-    </ScrollView>
-  );
+        <View style={{height: 100}} /> 
+      </ScrollView>
+    );
+  };
 
   const renderExtrato = () => {
     let mapaGrupos = {};
@@ -451,12 +481,13 @@ function MainApp({ session }) {
       let nomeGrupo = t.pago ? '✅ PAGOS / CONCLUÍDOS' : t.categoria;
       if (!mapaGrupos[nomeGrupo]) { 
         const catObj = categorias.find(c => c.nome === t.categoria); 
-        const corGrupo = t.pago ? '#10B981' : (catObj ? catObj.cor : '#94A3B8');
-        const iconeGrupo = t.pago ? '✔️' : (catObj ? catObj.icone : '🏷️');
+        const corHex = catObj && catObj.cor ? catObj.cor : '#94A3B8';
+        const corGrupo = t.pago ? '#10B981' : corHex;
+        const iconeGrupo = t.pago ? '✔️' : (catObj && catObj.icone ? catObj.icone : '🏷️');
         mapaGrupos[nomeGrupo] = { nome: nomeGrupo, cor: corGrupo, icone: iconeGrupo, transacoes: [], totalEntrada: 0, totalSaida: 0, isPago: t.pago }; 
       }
       mapaGrupos[nomeGrupo].transacoes.push(t);
-      if (t.tipo === 'entrada') mapaGrupos[nomeGrupo].totalEntrada += t.valor; else mapaGrupos[nomeGrupo].totalSaida += t.valor;
+      if (t.tipo === 'entrada') mapaGrupos[nomeGrupo].totalEntrada += Number(t.valor || 0); else mapaGrupos[nomeGrupo].totalSaida += Number(t.valor || 0);
     });
 
     const gruposArray = Object.values(mapaGrupos).sort((a,b) => {
@@ -471,7 +502,7 @@ function MainApp({ session }) {
       const cardConteudo = (
         <TouchableOpacity style={[styles.listCardGrouped, item.fixado && styles.cardFixado]} activeOpacity={0.9} onPress={() => mostrarDetalhes(item)}>
           <View style={styles.listCardInfo}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
               {item.fixado && <Text style={{ marginRight: 5 }}>📌</Text>}
               {renderDescricaoComHashtag(item.descricao, item.pago)}
             </View>
@@ -479,7 +510,7 @@ function MainApp({ session }) {
           </View>
           <View style={{ alignItems: 'flex-end', flexDirection: 'row' }}>
             <Text style={[styles.listCardValue, item.tipo === 'entrada' ? styles.verde : styles.vermelho, { marginRight: 12 }, item.pago && { color: '#94A3B8' }]}>
-              {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
+              {item.tipo === 'entrada' ? '+ ' : '- '}R$ {Number(item.valor || 0).toFixed(2)}
             </Text>
             {Platform.OS === 'web' && (
               <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -535,7 +566,7 @@ function MainApp({ session }) {
                   <View key={grupo.nome} style={styles.grupoContainer}>
                      <TouchableOpacity style={styles.grupoHeader} onPress={() => alternarCategoria(grupo.nome)} activeOpacity={0.8}>
                        <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                         <View style={[styles.catIconContainerPequeno, { backgroundColor: grupo.cor + '20' }]}><Text style={{fontSize: 12}}>{grupo.icone}</Text></View>
+                         <View style={[styles.catIconContainerPequeno, { backgroundColor: grupo.cor + '20' }]}><Text style={{fontSize: 14}}>{grupo.icone}</Text></View>
                          <Text style={styles.grupoTitulo}>{grupo.nome}</Text>
                          <Text style={styles.grupoQtd}>({grupo.transacoes.length})</Text>
                        </View>
@@ -577,6 +608,7 @@ function MainApp({ session }) {
           <TouchableOpacity style={styles.navItem} onPress={() => setModalCategoriasVisivel(true)}><Feather name="tag" size={24} color={'#94A3B8'} /><Text style={styles.navText}>Tags</Text></TouchableOpacity>
         </View>
 
+        {/* MODAL DE EDIÇÃO E INSERÇÃO BOTTOM SHEET */}
         <Modal animationType="slide" transparent={true} visible={modalVisivel} onRequestClose={fecharModal}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
             <View style={styles.modalConteudoBottomSheet}>
@@ -659,6 +691,7 @@ function MainApp({ session }) {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* MODAL DE GERENCIAR CATEGORIAS COM EMOJIS */}
         <Modal animationType="slide" transparent={true} visible={modalCategoriasVisivel} onRequestClose={() => setModalCategoriasVisivel(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
             <View style={[styles.modalConteudoBottomSheet, { maxHeight: '90%' }]}>
@@ -692,7 +725,7 @@ function MainApp({ session }) {
               <FlatList data={categorias} keyExtractor={item => item.id} style={{maxHeight: 250}} renderItem={({item}) => (
                 <View style={styles.catEditRow}>
                   <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <View style={[styles.catIconContainerPequeno, { backgroundColor: item.cor + '20', marginRight: 12 }]}><Text style={{fontSize: 16}}>{item.icone || '🏷️'}</Text></View>
+                    <View style={[styles.catIconContainerPequeno, { backgroundColor: (item.cor || '#94A3B8') + '20', marginRight: 12 }]}><Text style={{fontSize: 16}}>{item.icone || '🏷️'}</Text></View>
                     <Text style={styles.catEditNome}>{item.nome}</Text>
                   </View>
                   <TouchableOpacity onPress={() => excluirCategoria(item.id, item.nome)} style={{padding: 5}}><Feather name="trash-2" size={20} color="#EF4444" /></TouchableOpacity>
@@ -702,6 +735,7 @@ function MainApp({ session }) {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* CALENDÁRIO COM DIAS DA SEMANA */}
         {calendarioVisivel && (
           <View style={styles.calendarioOverlay}>
             <View style={styles.calendarioBox}>
@@ -735,6 +769,8 @@ function MainApp({ session }) {
 
         <Modal visible={menuAdicionarVisivel} transparent={true} animationType="slide" onRequestClose={() => setMenuAdicionarVisivel(false)}><TouchableOpacity style={styles.modalAdicionarOverlay} activeOpacity={1} onPress={() => setMenuAdicionarVisivel(false)}><View style={styles.menuAdicionarContent}><View style={styles.menuAdicionarHeader}><Text style={styles.menuAdicionarTitle}>O que deseja registrar?</Text></View><View style={styles.menuAdicionarBotoes}><TouchableOpacity style={styles.menuAdicionarOpcao} onPress={() => escolherTipoTransacao('saida')}><View style={[styles.iconBoxAdicionar, { backgroundColor: '#FEF2F2' }]}><Feather name="arrow-down" size={28} color="#B91C1C" /></View><Text style={styles.menuAdicionarTexto}>Despesa</Text></TouchableOpacity><TouchableOpacity style={styles.menuAdicionarOpcao} onPress={() => escolherTipoTransacao('entrada')}><View style={[styles.iconBoxAdicionar, { backgroundColor: '#F0FDF4' }]}><Feather name="arrow-up" size={28} color="#15803D" /></View><Text style={styles.menuAdicionarTexto}>Receita</Text></TouchableOpacity></View></View></TouchableOpacity></Modal>
         <Modal animationType="fade" transparent={true} visible={modalMesVisivel} onRequestClose={() => setModalMesVisivel(false)}><View style={styles.modalFundoCentro}><View style={styles.calendarioBox}><View style={styles.calTopo}><TouchableOpacity onPress={() => setAnoTemp(anoTemp - 1)}><Text style={styles.calSeta}>{'<'}</Text></TouchableOpacity><Text style={styles.calTitulo}>{anoTemp}</Text><TouchableOpacity onPress={() => setAnoTemp(anoTemp + 1)}><Text style={styles.calSeta}>{'>'}</Text></TouchableOpacity></View><View style={styles.gridMeses}>{mesesAbreviados.map((mes) => { const isSelecionado = mesSelecionado === `${mes.num.toString().padStart(2, '0')}/${anoTemp}`; return (<TouchableOpacity key={mes.num} style={[styles.mesItem, isSelecionado && styles.mesItemAtivo]} onPress={() => escolherMes(mes.num)}><Text style={[styles.mesItemTexto, isSelecionado && styles.mesItemTextoAtivo]}>{mes.nome}</Text></TouchableOpacity>);})}</View><TouchableOpacity style={styles.btnFecharCal} onPress={() => setModalMesVisivel(false)}><Text style={styles.textoFecharCal}>Cancelar</Text></TouchableOpacity></View></View></Modal>
+
+        {/* Modal do Importador CSV (Oculto no menu por brevidade, mas você pode usar) */}
         <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
             <View style={[styles.modalConteudoBottomSheet, { maxHeight: '90%' }]}>
@@ -822,16 +858,7 @@ const styles = StyleSheet.create({
   monthSelectorContainer: { paddingHorizontal: 20, marginTop: 10, marginBottom: 15, alignItems: 'center' },
   monthPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
   monthPillText: { fontSize: 14, fontWeight: '600', color: '#1E293B' },
-  cardsContainer: { paddingHorizontal: 20, gap: 12, marginBottom: 25, display: 'none' },
-  summaryCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderRadius: 16 },
-  summaryLabel: { fontSize: 13, fontWeight: '600', marginBottom: 5 },
-  summaryValue: { fontSize: 22, fontWeight: 'bold' },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginBottom: 15 },
-  chartSection: { paddingHorizontal: 20, paddingBottom: 10, display: 'none' },
-  chartBox: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  chartLabel: { fontSize: 14, color: '#64748B', marginBottom: 15, textAlign: 'center' },
-  barraFundo: { width: '100%', height: 16, backgroundColor: '#10B981', borderRadius: 8, overflow: 'hidden' },
-  barraProgresso: { height: '100%', backgroundColor: '#EF4444', borderRadius: 8 },
   categoriasSection: { paddingHorizontal: 20, paddingBottom: 20, marginTop: 10 },
   categoriasListContainer: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   extratoContainer: { flex: 1, backgroundColor: '#FAFAFA' },
