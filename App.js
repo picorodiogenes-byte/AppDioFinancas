@@ -5,7 +5,7 @@ import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler'
 import { Feather } from '@expo/vector-icons';
 
 function MainApp({ session }) {
-  const userId = session.user.id;
+  const userId = session?.user?.id;
   const [abaAtual, setAbaAtual] = useState('dashboard'); 
   
   const dataHoje = new Date();
@@ -23,7 +23,7 @@ function MainApp({ session }) {
   const [categoriasExpandidas, setCategoriasExpandidas] = useState({});
 
   const [perfilNome, setPerfilNome] = useState('Diógenes Pícoro');
-  const [perfilEmail, setPerfilEmail] = useState(session.user.email);
+  const [perfilEmail, setPerfilEmail] = useState(session?.user?.email || '');
   const [modalEditarPerfilVisivel, setModalEditarPerfilVisivel] = useState(false);
   const [modalSegurancaVisivel, setModalSegurancaVisivel] = useState(false);
 
@@ -60,16 +60,22 @@ function MainApp({ session }) {
           categorias: categoriasPadrao,
           metas: [],
           perfil_nome: 'Diógenes Pícoro',
-          perfil_email: session.user.email
+          perfil_email: session?.user?.email || ''
         });
         setCategorias(categoriasPadrao);
       } else {
-        setTransacoes(data.transacoes || []);
-        const catsCarregadas = (data.categorias && data.categorias.length > 0 ? data.categorias : categoriasPadrao).map(c => ({...c, icone: c.icone || '🏷️'}));
+        // Escudos de proteção: Array.isArray garante que o app não faça crash com dados antigos
+        setTransacoes(Array.isArray(data.transacoes) ? data.transacoes : []);
+        
+        let catsCarregadas = categoriasPadrao;
+        if (Array.isArray(data.categorias) && data.categorias.length > 0) {
+          catsCarregadas = data.categorias.map(c => ({...c, icone: c.icone || '🏷️'}));
+        }
         setCategorias(catsCarregadas);
-        setMetas(data.metas || []);
-        if (data.perfil_nome) setPerfilNome(data.perfil_nome);
-        if (data.perfil_email) setPerfilEmail(data.perfil_email);
+        
+        setMetas(Array.isArray(data.metas) ? data.metas : []);
+        if (data.perfil_nome) setPerfilNome(String(data.perfil_nome));
+        if (data.perfil_email) setPerfilEmail(String(data.perfil_email));
       }
     } catch (e) {
       console.log('Erro ao carregar dados da nuvem', e);
@@ -95,8 +101,8 @@ function MainApp({ session }) {
   };
 
   const somarMesesData = (dataStr, qtdMeses) => {
-    const partes = (dataStr || '').split('/');
-    if (partes.length !== 3) return dataStr;
+    const partes = String(dataStr || '').split('/');
+    if (partes.length !== 3) return String(dataStr || '');
     let dia = parseInt(partes[0], 10);
     let mes = parseInt(partes[1], 10) - 1 + qtdMeses;
     let ano = parseInt(partes[2], 10);
@@ -106,7 +112,7 @@ function MainApp({ session }) {
   };
 
   const processarTextoCsv = (texto) => {
-    const linhas = (texto || '').split('\n');
+    const linhas = String(texto || '').split('\n');
     let listaProcessada = [];
 
     linhas.forEach((linha, idx) => {
@@ -116,10 +122,10 @@ function MainApp({ session }) {
       if (colunas.length >= 4) {
         const diaMes = colunas[0]?.trim() || '01/01';
         const dataCompraStr = `${diaMes}/${anoCorrente}`;
-        const descStr = colunas[1]?.trim() || 'Importado';
-        const parcelaInfoStr = colunas[2]?.trim() || 'Única'; 
+        const descStr = String(colunas[1]?.trim() || 'Importado');
+        const parcelaInfoStr = String(colunas[2]?.trim() || 'Única'); 
         
-        let valorParcelaStr = colunas[3]?.trim() || '0';
+        let valorParcelaStr = String(colunas[3]?.trim() || '0');
         let isNegativo = valorParcelaStr.includes('-');
         let valorParcelaNum = parseFloat(valorParcelaStr.replace(/[R$\s-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
 
@@ -173,7 +179,7 @@ function MainApp({ session }) {
     atualizarTransacoes(novas);
 
     if (transacoesPreview.length > 0) {
-      const primeiraData = transacoesPreview[0].dataVencimento || '';
+      const primeiraData = String(transacoesPreview[0].dataVencimento || '');
       const partes = primeiraData.split('/');
       if (partes.length === 3) {
         setMesSelecionado(`${partes[1]}/${partes[2]}`);
@@ -239,7 +245,7 @@ function MainApp({ session }) {
   }, []);
 
   const transacoesDoMes = transacoes.filter(t => {
-    const dataAlvo = t.dataVencimento || t.dataCompra;
+    const dataAlvo = String(t.dataVencimento || t.dataCompra || '');
     if (!dataAlvo) return true;
     const partesData = dataAlvo.split('/');
     if (partesData.length === 3) return `${partesData[1]}/${partesData[2]}` === mesSelecionado;
@@ -252,7 +258,6 @@ function MainApp({ session }) {
     return 0;
   });
 
-  // PROTEÇÃO EXTRA: O Number() impede que dados salvos como string crashem o .toFixed()
   const receitas = transacoesDoMes.filter(t => t.tipo === 'entrada').reduce((acc, t) => acc + Number(t.valor || 0), 0);
   const despesas = transacoesDoMes.filter(t => t.tipo === 'saida').reduce((acc, t) => acc + Number(t.valor || 0), 0);
   const despesasPagas = transacoesDoMes.filter(t => t.tipo === 'saida' && t.pago).reduce((acc, t) => acc + Number(t.valor || 0), 0);
@@ -262,8 +267,8 @@ function MainApp({ session }) {
   const porcentagemDespesa = receitas > 0 ? (despesas / receitas) * 100 : (despesas > 0 ? 100 : 0);
   const porcentagemLimitada = Math.min(porcentagemDespesa, 100);
 
-  const mesAtualNome = nomesMeses[mesSelecionado.split('/')[0]] || 'Mês';
-  const anoAtual = mesSelecionado.split('/')[1] || anoCorrente;
+  const mesAtualNome = nomesMeses[String(mesSelecionado || '').split('/')[0]] || 'Mês';
+  const anoAtual = String(mesSelecionado || '').split('/')[1] || anoCorrente;
 
   const calcularDespesasPorCategoria = () => {
     let mapaCategorias = {};
@@ -281,9 +286,8 @@ function MainApp({ session }) {
   };
   const despesasAgrupadas = calcularDespesasPorCategoria();
 
-  // PROTEÇÃO DE ESTRUTURA PARA HASHTAGS
   const renderDescricaoComHashtag = (descricao, pago) => {
-    const texto = descricao || 'Sem descrição';
+    const texto = String(descricao || 'Sem descrição');
     const palavras = texto.split(' ');
     return (
       <Text style={[styles.listCardTitle, pago && { textDecorationLine: 'line-through', color: '#94A3B8' }]}>
@@ -302,7 +306,7 @@ function MainApp({ session }) {
   
   const abrirCalendario = (campo) => { 
     setCampoDataAtivo(campo); 
-    let dataReferencia = campo === 'meta_alvo' ? dataHoje.toLocaleDateString('pt-BR') : (novaDataCompra || dataHoje.toLocaleDateString('pt-BR'));
+    let dataReferencia = campo === 'meta_alvo' ? dataHoje.toLocaleDateString('pt-BR') : String(novaDataCompra || dataHoje.toLocaleDateString('pt-BR'));
     const partes = dataReferencia.split('/');
     if (partes.length === 3) { setCalMes(parseInt(partes[1], 10)); setCalAno(parseInt(partes[2], 10)); }
     setCalendarioVisivel(true); 
@@ -338,14 +342,14 @@ function MainApp({ session }) {
 
   const abrirEdicao = (item) => {
     setIdEditando(item.id); setNovoTipo(item.tipo); setNovaModalidade(item.modalidade || 'a_vista'); setNovaDescricao(item.descricao);
-    setNovaCategoriaForm(item.categoria); setNovoValor(item.valor ? item.valor.toString() : '0'); setNovaDataCompra(item.dataCompra); setNovaDataVencimento(item.dataVencimento);
+    setNovaCategoriaForm(item.categoria); setNovoValor(item.valor ? String(item.valor) : '0'); setNovaDataCompra(item.dataCompra); setNovaDataVencimento(item.dataVencimento);
     setModalVisivel(true);
   };
 
   const salvarTransacao = () => {
     if (!novaDescricao || !novoValor) { Platform.OS === 'web' ? window.alert("Preencha a descrição e o valor.") : Alert.alert("Erro", "Preencha a descrição e o valor."); return; }
     
-    const valorTotal = parseFloat(novoValor.replace(',', '.'));
+    const valorTotal = parseFloat(String(novoValor).replace(',', '.'));
     let dataBaseCompra = novaDataCompra;
     let vencimentoBase = novoTipo === 'entrada' ? novaDataCompra : (novaDataVencimento || novaDataCompra);
 
@@ -404,7 +408,6 @@ function MainApp({ session }) {
   };
 
   const renderDashboard = () => {
-    // Calculo do donut protegido contra NaN
     const rotDeg = isNaN(porcentagemLimitada) ? 0 : Math.min((porcentagemLimitada / 100) * 360, 360);
 
     return (
@@ -445,8 +448,9 @@ function MainApp({ session }) {
             {despesasAgrupadas.length === 0 ? (<Text style={styles.textoVazio}>Sem gastos pendentes.</Text>) : (
               despesasAgrupadas.map((item, index) => { 
                 const catObj = categorias.find(c => c.nome === item.nome); 
-                const corHex = catObj && catObj.cor ? catObj.cor : '#94A3B8'; 
-                const icone = catObj && catObj.icone ? catObj.icone : '🏷️';
+                const corHex = catObj && catObj.cor ? String(catObj.cor) : '#94A3B8'; 
+                const icone = catObj && catObj.icone ? String(catObj.icone) : '🏷️';
+                const percentValor = isNaN(item.porcentagem) ? 0 : item.porcentagem.toFixed(0);
                 return (
                   <View key={index} style={styles.catRowAdvanced}>
                     <View style={styles.catRowTop}>
@@ -457,12 +461,12 @@ function MainApp({ session }) {
                         <Text style={styles.catNomeAdvanced}>{item.nome}</Text>
                       </View>
                       <View style={styles.catRightInfo}>
-                        <Text style={styles.catValorAdvanced}>R$ {item.total.toFixed(2)}</Text>
-                        <Text style={styles.catPercentAdvanced}>{isNaN(item.porcentagem) ? 0 : item.porcentagem.toFixed(0)}%</Text>
+                        <Text style={styles.catValorAdvanced}>R$ {Number(item.total || 0).toFixed(2)}</Text>
+                        <Text style={styles.catPercentAdvanced}>{percentValor}%</Text>
                       </View>
                     </View>
                     <View style={styles.catProgressBarBg}>
-                      <View style={[styles.catProgressBarFill, { backgroundColor: corHex, width: `${isNaN(item.porcentagem) ? 0 : item.porcentagem}%` }]} />
+                      <View style={[styles.catProgressBarFill, { backgroundColor: corHex, width: `${percentValor}%` }]} />
                     </View>
                   </View>
                 ) 
@@ -478,12 +482,12 @@ function MainApp({ session }) {
   const renderExtrato = () => {
     let mapaGrupos = {};
     transacoesOrdenadasDoMes.forEach(t => {
-      let nomeGrupo = t.pago ? '✅ PAGOS / CONCLUÍDOS' : t.categoria;
+      let nomeGrupo = t.pago ? '✅ PAGOS / CONCLUÍDOS' : String(t.categoria || 'Outros');
       if (!mapaGrupos[nomeGrupo]) { 
         const catObj = categorias.find(c => c.nome === t.categoria); 
-        const corHex = catObj && catObj.cor ? catObj.cor : '#94A3B8';
+        const corHex = catObj && catObj.cor ? String(catObj.cor) : '#94A3B8';
         const corGrupo = t.pago ? '#10B981' : corHex;
-        const iconeGrupo = t.pago ? '✔️' : (catObj && catObj.icone ? catObj.icone : '🏷️');
+        const iconeGrupo = t.pago ? '✔️' : (catObj && catObj.icone ? String(catObj.icone) : '🏷️');
         mapaGrupos[nomeGrupo] = { nome: nomeGrupo, cor: corGrupo, icone: iconeGrupo, transacoes: [], totalEntrada: 0, totalSaida: 0, isPago: t.pago }; 
       }
       mapaGrupos[nomeGrupo].transacoes.push(t);
@@ -608,7 +612,6 @@ function MainApp({ session }) {
           <TouchableOpacity style={styles.navItem} onPress={() => setModalCategoriasVisivel(true)}><Feather name="tag" size={24} color={'#94A3B8'} /><Text style={styles.navText}>Tags</Text></TouchableOpacity>
         </View>
 
-        {/* MODAL DE EDIÇÃO E INSERÇÃO BOTTOM SHEET */}
         <Modal animationType="slide" transparent={true} visible={modalVisivel} onRequestClose={fecharModal}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
             <View style={styles.modalConteudoBottomSheet}>
@@ -635,7 +638,7 @@ function MainApp({ session }) {
                 <Text style={styles.label}>Categoria</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.listaCategorias}>
                   {categorias.map((cat) => (
-                    <TouchableOpacity key={cat.id} style={[styles.pillCategoria, novaCategoriaForm === cat.nome && { backgroundColor: cat.cor }]} onPress={() => setNovaCategoriaForm(cat.nome)}>
+                    <TouchableOpacity key={cat.id} style={[styles.pillCategoria, novaCategoriaForm === cat.nome && { backgroundColor: String(cat.cor || '#94A3B8') }]} onPress={() => setNovaCategoriaForm(cat.nome)}>
                       <View style={{flexDirection: 'row', alignItems: 'center'}}>
                         <Text style={[styles.textoPill, novaCategoriaForm === cat.nome && styles.textoBranco]}>{cat.icone} {cat.nome}</Text>
                       </View>
@@ -662,7 +665,7 @@ function MainApp({ session }) {
 
                 {novoTipo === 'saida' ? (
                   novaModalidade === 'fixa' ? (
-                    <View style={styles.avisoFixaContainer}><Text style={styles.avisoFixaTexto}>💡 A despesa começará automaticamente em {nomesMeses[mesSelecionado.split('/')[0]]}/{mesSelecionado.split('/')[1]}</Text></View>
+                    <View style={styles.avisoFixaContainer}><Text style={styles.avisoFixaTexto}>💡 A despesa começará automaticamente em {nomesMeses[String(mesSelecionado || '').split('/')[0]]}/{String(mesSelecionado || '').split('/')[1]}</Text></View>
                   ) : (
                     <View style={styles.linhaDupla}>
                       <View style={styles.metadeInput}>
@@ -691,7 +694,6 @@ function MainApp({ session }) {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* MODAL DE GERENCIAR CATEGORIAS COM EMOJIS */}
         <Modal animationType="slide" transparent={true} visible={modalCategoriasVisivel} onRequestClose={() => setModalCategoriasVisivel(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
             <View style={[styles.modalConteudoBottomSheet, { maxHeight: '90%' }]}>
@@ -725,7 +727,7 @@ function MainApp({ session }) {
               <FlatList data={categorias} keyExtractor={item => item.id} style={{maxHeight: 250}} renderItem={({item}) => (
                 <View style={styles.catEditRow}>
                   <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <View style={[styles.catIconContainerPequeno, { backgroundColor: (item.cor || '#94A3B8') + '20', marginRight: 12 }]}><Text style={{fontSize: 16}}>{item.icone || '🏷️'}</Text></View>
+                    <View style={[styles.catIconContainerPequeno, { backgroundColor: String(item.cor || '#94A3B8') + '20', marginRight: 12 }]}><Text style={{fontSize: 16}}>{item.icone || '🏷️'}</Text></View>
                     <Text style={styles.catEditNome}>{item.nome}</Text>
                   </View>
                   <TouchableOpacity onPress={() => excluirCategoria(item.id, item.nome)} style={{padding: 5}}><Feather name="trash-2" size={20} color="#EF4444" /></TouchableOpacity>
@@ -735,7 +737,6 @@ function MainApp({ session }) {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* CALENDÁRIO COM DIAS DA SEMANA */}
         {calendarioVisivel && (
           <View style={styles.calendarioOverlay}>
             <View style={styles.calendarioBox}>
@@ -769,8 +770,7 @@ function MainApp({ session }) {
 
         <Modal visible={menuAdicionarVisivel} transparent={true} animationType="slide" onRequestClose={() => setMenuAdicionarVisivel(false)}><TouchableOpacity style={styles.modalAdicionarOverlay} activeOpacity={1} onPress={() => setMenuAdicionarVisivel(false)}><View style={styles.menuAdicionarContent}><View style={styles.menuAdicionarHeader}><Text style={styles.menuAdicionarTitle}>O que deseja registrar?</Text></View><View style={styles.menuAdicionarBotoes}><TouchableOpacity style={styles.menuAdicionarOpcao} onPress={() => escolherTipoTransacao('saida')}><View style={[styles.iconBoxAdicionar, { backgroundColor: '#FEF2F2' }]}><Feather name="arrow-down" size={28} color="#B91C1C" /></View><Text style={styles.menuAdicionarTexto}>Despesa</Text></TouchableOpacity><TouchableOpacity style={styles.menuAdicionarOpcao} onPress={() => escolherTipoTransacao('entrada')}><View style={[styles.iconBoxAdicionar, { backgroundColor: '#F0FDF4' }]}><Feather name="arrow-up" size={28} color="#15803D" /></View><Text style={styles.menuAdicionarTexto}>Receita</Text></TouchableOpacity></View></View></TouchableOpacity></Modal>
         <Modal animationType="fade" transparent={true} visible={modalMesVisivel} onRequestClose={() => setModalMesVisivel(false)}><View style={styles.modalFundoCentro}><View style={styles.calendarioBox}><View style={styles.calTopo}><TouchableOpacity onPress={() => setAnoTemp(anoTemp - 1)}><Text style={styles.calSeta}>{'<'}</Text></TouchableOpacity><Text style={styles.calTitulo}>{anoTemp}</Text><TouchableOpacity onPress={() => setAnoTemp(anoTemp + 1)}><Text style={styles.calSeta}>{'>'}</Text></TouchableOpacity></View><View style={styles.gridMeses}>{mesesAbreviados.map((mes) => { const isSelecionado = mesSelecionado === `${mes.num.toString().padStart(2, '0')}/${anoTemp}`; return (<TouchableOpacity key={mes.num} style={[styles.mesItem, isSelecionado && styles.mesItemAtivo]} onPress={() => escolherMes(mes.num)}><Text style={[styles.mesItemTexto, isSelecionado && styles.mesItemTextoAtivo]}>{mes.nome}</Text></TouchableOpacity>);})}</View><TouchableOpacity style={styles.btnFecharCal} onPress={() => setModalMesVisivel(false)}><Text style={styles.textoFecharCal}>Cancelar</Text></TouchableOpacity></View></View></Modal>
-
-        {/* Modal do Importador CSV (Oculto no menu por brevidade, mas você pode usar) */}
+        
         <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
             <View style={[styles.modalConteudoBottomSheet, { maxHeight: '90%' }]}>
