@@ -1000,33 +1000,55 @@ function MainApp({ session }) {
           </KeyboardAvoidingView>
         </Modal>
 
-        <Modal animationType="slide" transparent={true} visible={modalCategoriasVisivel} onRequestClose={() => setModalCategoriasVisivel(false)}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}>
-            <View style={styles.modalConteudo}>
-              <View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Gerenciar Tags</Text><TouchableOpacity onPress={() => setModalCategoriasVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View>
-              <Text style={styles.labelPequeno}>Nova Tag:</Text>
-              <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15}}>
-                <TextInput style={[styles.input, {flex: 1, marginRight: 10}]} placeholder="Ex: Viagem" value={novaCategoriaNome} onChangeText={setNovaCategoriaNome} />
-                <TouchableOpacity style={styles.btnAdicionarCategoria} onPress={adicionarCategoria}><Feather name="plus" size={20} color="#FFF" /></TouchableOpacity>
-              </View>
-              <Text style={styles.labelPequeno}>Cor Principal:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
-                {coresDisponiveis.map(cor => (<TouchableOpacity key={cor} style={[styles.bolinhaCor, {backgroundColor: cor}, novaCategoriaCor === cor && styles.bolinhaCorAtiva]} onPress={() => setNovaCategoriaCor(cor)} />))}
+        <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
+        <View style={[styles.modalConteudoBottomSheet, { maxHeight: '90%' }]}>
+          <View style={styles.dragHandle} />
+          <View style={styles.modalCabecalho}>
+            <Text style={styles.modalTitulo}>Importador CSV</Text>
+            <TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Feather name="x-circle" size={24} color="#64748B" /></TouchableOpacity>
+          </View>
+          <TextInput style={[styles.inputClean, { height: 120, textAlignVertical: 'top', fontSize: 13 }]} multiline={true} placeholder="Data da Compra ; Descrição ; Parcela (01/02) ; Valor Parcela ; Valor Total" value={conteudoCsvInput} onChangeText={setConteudoCsvInput} />
+          <TouchableOpacity style={[styles.botaoSalvarGrande, { backgroundColor: '#10B981', marginTop: 10 }]} onPress={() => processarTextoCsv(conteudoCsvInput)}>
+            <Text style={styles.textoBotaoSalvarGrande}>Processar Ciclo de Parcelas</Text>
+          </TouchableOpacity>
+          {transacoesPreview.length > 0 && (
+            <View style={{ marginTop: 15, flex: 1 }}>
+              <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} parcelas):</Text>
+              <ScrollView style={{ maxHeight: 180, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 10 }}>
+                {transacoesPreview.map((item, i) => (
+                  <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
+                    <View style={{ flex: 1 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text><Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento}</Text></View>
+                    <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>- R$ {item.valor.toFixed(2)}</Text></View>
+                  </View>
+                ))}
               </ScrollView>
-              <Text style={styles.labelPequeno}>Tags Existentes:</Text>
-              <FlatList data={categorias} keyExtractor={item => item.id} style={{maxHeight: 250}} renderItem={({item}) => (
-                <View style={styles.catEditRow}>
-                  <View style={{flexDirection: 'row', alignItems: 'center'}}><View style={{width: 12, height: 12, borderRadius: 6, backgroundColor: item.cor, marginRight: 10}} /><Text style={styles.catEditNome}>{item.nome}</Text></View>
-                  <TouchableOpacity onPress={() => excluirCategoria(item.id, item.nome)} style={{padding: 5}}><Feather name="trash-2" size={20} color="#EF4444" /></TouchableOpacity>
-                </View>
-              )} />
+              <TouchableOpacity style={[styles.botaoSalvarGrande, { marginTop: 15 }]} onPress={confirmarImportacaoLote}><Text style={styles.textoBotaoSalvarGrande}>Confirmar e Inserir no Extrato</Text></TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </Modal>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
 
-      </SafeAreaView>
-    </GestureHandlerRootView>
-  );
+    {/* CALENDÁRIO MOVIDO PARA O FINAL PARA FICAR SEMPRE À FRENTE */}
+    {calendarioVisivel && (
+      <View style={styles.calendarioOverlay}>
+        <View style={styles.calendarioBox}>
+          <View style={styles.calTopo}>
+            <TouchableOpacity onPress={() => setCalMes(calMes === 1 ? 12 : calMes - 1)}><Text style={styles.calSeta}>{'<'}</Text></TouchableOpacity>
+            <Text style={styles.calTitulo}>{nomesMeses[calMes.toString().padStart(2, '0')]} {calAno}</Text>
+            <TouchableOpacity onPress={() => setCalMes(calMes === 12 ? 1 : calMes + 1)}><Text style={styles.calSeta}>{'>'}</Text></TouchableOpacity>
+          </View>
+          <View style={styles.gridDiasSemana}>{arrayDiasSemana.map(d => <Text key={d} style={styles.diaSemanaTexto}>{d}</Text>)}</View>
+          <View style={styles.gridDias}>{arrayDiasCompletos.map((diaItem, idx) => {if (typeof diaItem === 'string') return <View key={idx} style={styles.diaItem} />;return <TouchableOpacity key={idx} style={styles.diaItem} onPress={() => selecionarDia(diaItem)}><Text style={styles.diaTexto}>{diaItem}</Text></TouchableOpacity>})}</View>
+          <TouchableOpacity style={styles.btnFecharCal} onPress={() => setCalendarioVisivel(false)}><Text style={styles.textoFecharCal}>Cancelar</Text></TouchableOpacity>
+        </View>
+      </View>
+    )}
+
+  </SafeAreaView>
+</GestureHandlerRootView>
+);
 }
 
 const styles = StyleSheet.create({
@@ -1052,8 +1074,7 @@ const styles = StyleSheet.create({
   grupoConteudo: { backgroundColor: '#FAFAFA', borderTopWidth: 1, borderTopColor: '#F1F5F9', padding: 10 },
   cardContainerGrouped: { marginBottom: 8 },
   listCardGrouped: { backgroundColor: '#FFFFFF', padding: 15, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1 },
-  calendarioOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
-  metasHeader: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginHorizontal: 20, marginTop: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  calendarioOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 9999 },  metasHeader: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginHorizontal: 20, marginTop: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   metasHeaderLabel: { fontSize: 14, color: '#64748B', fontWeight: '600' },
   metasHeaderValor: { fontSize: 32, fontWeight: 'bold', color: '#10B981', marginVertical: 5 },
   btnNovaMeta: { backgroundColor: '#3B82F6', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, marginTop: 10, flexDirection: 'row', alignItems: 'center' },
