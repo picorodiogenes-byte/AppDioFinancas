@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 function MainApp({ session }) {
-  const userId = session.user.id;
+  const userId = session?.user?.id;
   const [abaAtual, setAbaAtual] = useState('dashboard'); 
   
   const dataHoje = new Date();
@@ -24,10 +24,9 @@ function MainApp({ session }) {
   const [categoriasExpandidas, setCategoriasExpandidas] = useState({});
 
   const [perfilNome, setPerfilNome] = useState('Diógenes Pícoro');
-  const [perfilEmail, setPerfilEmail] = useState(session.user.email);
+  const [perfilEmail, setPerfilEmail] = useState(session?.user?.email || '');
   const [modalEditarPerfilVisivel, setModalEditarPerfilVisivel] = useState(false);
   const [modalSegurancaVisivel, setModalSegurancaVisivel] = useState(false);
-  const [biometriaAtiva, setBiometriaAtiva] = useState(false);
 
   const [modalImportarVisivel, setModalImportarVisivel] = useState(false);
   const [conteudoCsvInput, setConteudoCsvInput] = useState('');
@@ -62,15 +61,15 @@ function MainApp({ session }) {
           categorias: categoriasPadrao,
           metas: [],
           perfil_nome: 'Diógenes Pícoro',
-          perfil_email: session.user.email
+          perfil_email: session?.user?.email || ''
         });
         setCategorias(categoriasPadrao);
       } else {
-        setTransacoes(data.transacoes || []);
-        setCategorias(data.categorias && data.categorias.length > 0 ? data.categorias : categoriasPadrao);
-        setMetas(data.metas || []);
-        if (data.perfil_nome) setPerfilNome(data.perfil_nome);
-        if (data.perfil_email) setPerfilEmail(data.perfil_email);
+        setTransacoes(Array.isArray(data.transacoes) ? data.transacoes : []);
+        setCategorias(Array.isArray(data.categorias) && data.categorias.length > 0 ? data.categorias : categoriasPadrao);
+        setMetas(Array.isArray(data.metas) ? data.metas : []);
+        if (data.perfil_nome) setPerfilNome(String(data.perfil_nome));
+        if (data.perfil_email) setPerfilEmail(String(data.perfil_email));
       }
     } catch (e) {
       console.log('Erro ao carregar dados da nuvem', e);
@@ -80,24 +79,24 @@ function MainApp({ session }) {
   const atualizarTransacoes = async (novasTransacoes) => {
     setTransacoes(novasTransacoes);
     try { await supabase.from('cloud_state').update({ transacoes: novasTransacoes }).eq('user_id', userId); } 
-    catch (e) { console.log('Erro ao salvar transações', e); }
+    catch (e) { console.log('Erro ao salvar transações na nuvem', e); }
   };
 
   const atualizarCategorias = async (novasCategorias) => {
     setCategorias(novasCategorias);
     try { await supabase.from('cloud_state').update({ categorias: novasCategorias }).eq('user_id', userId); } 
-    catch (e) { console.log('Erro ao salvar categorias', e); }
+    catch (e) { console.log('Erro ao salvar categorias na nuvem', e); }
   };
 
   const atualizarMetas = async (novasMetas) => {
     setMetas(novasMetas);
     try { await supabase.from('cloud_state').update({ metas: novasMetas }).eq('user_id', userId); } 
-    catch (e) { console.log('Erro ao salvar metas', e); }
+    catch (e) { console.log('Erro ao salvar metas na nuvem', e); }
   };
 
   const somarMesesData = (dataStr, qtdMeses) => {
-    const partes = dataStr.split('/');
-    if (partes.length !== 3) return dataStr;
+    const partes = String(dataStr || '').split('/');
+    if (partes.length !== 3) return String(dataStr || '');
     let dia = parseInt(partes[0], 10);
     let mes = parseInt(partes[1], 10) - 1 + qtdMeses;
     let ano = parseInt(partes[2], 10);
@@ -107,7 +106,7 @@ function MainApp({ session }) {
   };
 
   const processarTextoCsv = (texto) => {
-    const linhas = texto.split('\n');
+    const linhas = String(texto || '').split('\n');
     let listaProcessada = [];
 
     linhas.forEach((linha, idx) => {
@@ -117,10 +116,10 @@ function MainApp({ session }) {
       if (colunas.length >= 4) {
         const diaMes = colunas[0]?.trim() || '01/01';
         const dataCompraStr = `${diaMes}/${anoCorrente}`;
-        const descStr = colunas[1]?.trim() || 'Importado';
-        const parcelaInfoStr = colunas[2]?.trim() || 'Única'; 
+        const descStr = String(colunas[1]?.trim() || 'Importado');
+        const parcelaInfoStr = String(colunas[2]?.trim() || 'Única'); 
         
-        let valorParcelaStr = colunas[3]?.trim() || '0';
+        let valorParcelaStr = String(colunas[3]?.trim() || '0');
         let isNegativo = valorParcelaStr.includes('-');
         let valorParcelaNum = parseFloat(valorParcelaStr.replace(/[R$\s-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
 
@@ -134,9 +133,9 @@ function MainApp({ session }) {
 
         let catSugerida = 'Cartão de Crédito';
         const descLower = descStr.toLowerCase();
-        if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto') || descLower.includes('gasolina')) catSugerida = 'Lazer';
-        else if (descLower.includes('supermercado') || descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude') || descLower.includes('saude online') || descLower.includes('burger king')) catSugerida = 'Alimentação';
-        else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua') || descLower.includes('condominio')) catSugerida = 'Moradia';
+        if (descLower.includes('uber') || descLower.includes('99') || descLower.includes('posto')) catSugerida = 'Lazer';
+        else if (descLower.includes('mercado') || descLower.includes('ifood') || descLower.includes('padaria') || descLower.includes('saude')) catSugerida = 'Alimentação';
+        else if (descLower.includes('aluguel') || descLower.includes('luz') || descLower.includes('agua')) catSugerida = 'Moradia';
         else if (descLower.includes('salario') || descLower.includes('pix recebido')) catSugerida = 'Renda';
 
         let tipoTransacao = isNegativo || descLower.includes('estorno') ? 'entrada' : 'saida';
@@ -165,7 +164,7 @@ function MainApp({ session }) {
     });
 
     setTransacoesPreview(listaProcessada);
-    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas! Revise a prévia.`);
+    if (Platform.OS === 'web') window.alert(`${listaProcessada.length} parcelas geradas no ciclo! Revise a prévia.`);
   };
 
   const confirmarImportacaoLote = () => {
@@ -174,13 +173,17 @@ function MainApp({ session }) {
     atualizarTransacoes(novas);
 
     if (transacoesPreview.length > 0) {
-      const primeiraData = transacoesPreview[0].dataVencimento;
+      const primeiraData = String(transacoesPreview[0].dataVencimento || '');
       const partes = primeiraData.split('/');
-      if (partes.length === 3) setMesSelecionado(`${partes[1]}/${partes[2]}`);
+      if (partes.length === 3) {
+        setMesSelecionado(`${partes[1]}/${partes[2]}`);
+      }
     }
 
-    setModalImportarVisivel(false); setConteudoCsvInput(''); setTransacoesPreview([]);
-    Platform.OS === 'web' ? window.alert('Importação concluída!') : Alert.alert('Sucesso', 'Importação concluída!');
+    setModalImportarVisivel(false);
+    setConteudoCsvInput('');
+    setTransacoesPreview([]);
+    Platform.OS === 'web' ? window.alert('Importação concluída e salva na nuvem! Visualizando cobranças.') : Alert.alert('Sucesso', 'Importação salva na nuvem!');
   };
 
   const [modalNovaMetaVisivel, setModalNovaMetaVisivel] = useState(false);
@@ -233,7 +236,7 @@ function MainApp({ session }) {
   }, []);
 
   const transacoesDoMes = transacoes.filter(t => {
-    const dataAlvo = t.dataVencimento || t.dataCompra;
+    const dataAlvo = String(t.dataVencimento || t.dataCompra || '');
     if (!dataAlvo) return true;
     const partesData = dataAlvo.split('/');
     if (partesData.length === 3) return `${partesData[1]}/${partesData[2]}` === mesSelecionado;
@@ -246,11 +249,9 @@ function MainApp({ session }) {
     return 0;
   });
 
-  const receitas = transacoesDoMes.filter(t => t.tipo === 'entrada').reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
-  const despesas = transacoesDoMes.filter(t => t.tipo === 'saida').reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
-  
-  // LÓGICA SEGURA: SOMAS DE PAGOS E PENDENTES
-  const despesasPagas = transacoesDoMes.filter(t => t.tipo === 'saida' && t.pago).reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
+  const receitas = transacoesDoMes.filter(t => t.tipo === 'entrada').reduce((acc, t) => acc + Number(t.valor || 0), 0);
+  const despesas = transacoesDoMes.filter(t => t.tipo === 'saida').reduce((acc, t) => acc + Number(t.valor || 0), 0);
+  const despesasPagas = transacoesDoMes.filter(t => t.tipo === 'saida' && t.pago).reduce((acc, t) => acc + Number(t.valor || 0), 0);
   const despesasPendentes = despesas - despesasPagas;
 
   const saldo = receitas - despesas;
@@ -258,16 +259,15 @@ function MainApp({ session }) {
   const porcentagemLimitada = Math.min(porcentagemDespesa, 100);
   const percWidthSafe = isNaN(porcentagemLimitada) || !isFinite(porcentagemLimitada) ? 0 : porcentagemLimitada;
 
-  const mesAtualNome = nomesMeses[mesSelecionado.split('/')[0]];
-  const anoAtual = mesSelecionado.split('/')[1];
+  const mesAtualNome = nomesMeses[String(mesSelecionado || '').split('/')[0]] || 'Mês';
+  const anoAtual = String(mesSelecionado || '').split('/')[1] || anoCorrente;
 
   const calcularDespesasPorCategoria = () => {
     let mapaCategorias = {};
     transacoesDoMes.forEach(t => {
-      // Modificação: Só inclui contas que AINDA NÃO FORAM PAGAS nas categorias
       if (t.tipo === 'saida' && !t.pago) { 
         if (!mapaCategorias[t.categoria]) mapaCategorias[t.categoria] = 0;
-        mapaCategorias[t.categoria] += (Number(t.valor) || 0);
+        mapaCategorias[t.categoria] += Number(t.valor || 0);
       }
     });
     return Object.keys(mapaCategorias).map(cat => ({
@@ -278,38 +278,35 @@ function MainApp({ session }) {
   };
   const despesasAgrupadas = calcularDespesasPorCategoria();
 
-  const gerarDadosAnuais = (ano) => {
-    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    let dados = meses.map(m => ({ mes: m, receitas: 0, despesas: 0 }));
-    transacoes.forEach(t => {
-      const dataAlvo = t.dataVencimento || t.dataCompra;
-      if (!dataAlvo) return;
-      const partes = dataAlvo.split('/');
-      if (partes.length === 3 && parseInt(partes[2], 10) === ano) {
-        const mesIndex = parseInt(partes[1], 10) - 1;
-        if (t.tipo === 'entrada') dados[mesIndex].receitas += (Number(t.valor) || 0);
-        else if (t.tipo === 'saida') dados[mesIndex].despesas += (Number(t.valor) || 0);
-      }
-    });
-    return dados;
+  const renderDescricaoComHashtag = (descricao, pago) => {
+    const texto = String(descricao || 'Sem descrição');
+    const palavras = texto.split(' ');
+    return (
+      <Text style={[styles.listCardTitle, pago && { textDecorationLine: 'line-through', color: '#94A3B8' }]}>
+        {palavras.map((palavra, index) => {
+          if (palavra.startsWith('#')) {
+            return <Text key={index} style={{ color: '#3B82F6', fontWeight: 'bold' }}>{palavra} </Text>;
+          }
+          return <Text key={index}>{palavra} </Text>;
+        })}
+      </Text>
+    );
   };
 
-  const abrirSeletorMes = () => { setAnoTemp(parseInt(anoAtual)); setModalMesVisivel(true); };
+  const abrirSeletorMes = () => { setAnoTemp(parseInt(anoAtual) || anoCorrente); setModalMesVisivel(true); };
   const escolherMes = (mesNum) => { setMesSelecionado(`${mesNum.toString().padStart(2, '0')}/${anoTemp}`); setModalMesVisivel(false); };
   
   const abrirCalendario = (campo) => { 
     setCampoDataAtivo(campo); 
-    let dataReferencia = campo === 'meta_alvo' ? novaMetaDataAlvo : novaDataCompra;
-    const partes = dataReferencia.split('/');
+    let dataReferencia = campo === 'compra' ? (novaDataCompra || dataHoje.toLocaleDateString('pt-BR')) : (novaDataVencimento || dataHoje.toLocaleDateString('pt-BR'));
+    const partes = String(dataReferencia).split('/');
     if (partes.length === 3) { setCalMes(parseInt(partes[1], 10)); setCalAno(parseInt(partes[2], 10)); }
     setCalendarioVisivel(true); 
   };
   
   const selecionarDia = (dia) => {
     const dataFormatada = `${dia.toString().padStart(2, '0')}/${calMes.toString().padStart(2, '0')}/${calAno}`;
-    if (campoDataAtivo === 'meta_alvo') {
-      setNovaMetaDataAlvo(dataFormatada);
-    } else if (campoDataAtivo === 'compra') { 
+    if (campoDataAtivo === 'compra') { 
       setNovaDataCompra(dataFormatada); 
       if (!novaDataVencimento || novoTipo === 'entrada') setNovaDataVencimento(dataFormatada); 
     } else { 
@@ -335,15 +332,14 @@ function MainApp({ session }) {
 
   const abrirEdicao = (item) => {
     setIdEditando(item.id); setNovoTipo(item.tipo); setNovaModalidade(item.modalidade || 'a_vista'); setNovaDescricao(item.descricao);
-    setNovaCategoriaForm(item.categoria); setNovoValor(item.valor.toString()); setNovaDataCompra(item.dataCompra); setNovaDataVencimento(item.dataVencimento);
+    setNovaCategoriaForm(item.categoria); setNovoValor(item.valor ? String(item.valor) : '0'); setNovaDataCompra(item.dataCompra); setNovaDataVencimento(item.dataVencimento);
     setModalVisivel(true);
   };
 
   const salvarTransacao = () => {
     if (!novaDescricao || !novoValor) { Platform.OS === 'web' ? window.alert("Preencha a descrição e o valor.") : Alert.alert("Erro", "Preencha a descrição e o valor."); return; }
-    if (novaModalidade !== 'fixa' && !novaDataCompra) { Platform.OS === 'web' ? window.alert("Selecione a data da transação.") : Alert.alert("Erro", "Selecione a data da transação."); return; }
-
-    const valorTotal = parseFloat(novoValor.replace(',', '.'));
+    
+    const valorTotal = parseFloat(String(novoValor).replace(',', '.'));
     let dataBaseCompra = novaDataCompra;
     let vencimentoBase = novoTipo === 'entrada' ? novaDataCompra : (novaDataVencimento || novaDataCompra);
 
@@ -361,10 +357,6 @@ function MainApp({ session }) {
         const nParcelas = Math.max(parseInt(qtdParcelas, 10) || 2, 2); const valorParcela = parseFloat((valorTotal / nParcelas).toFixed(2)); let novas = [];
         for (let i = 0; i < nParcelas; i++) { novas.push({ id: `${Date.now()}_${i}`, descricao: `${novaDescricao} [${i + 1}/${nParcelas}]`, valor: valorParcela, tipo: 'saida', modalidade: 'parcelada', parcelasInfo: `${i + 1}/${nParcelas}`, categoria: novaCategoriaForm, dataCompra: dataBaseCompra, dataVencimento: somarMesesData(vencimentoBase, i), fixado: false, pago: false }); }
         transacoesAtualizadas = [...novas, ...transacoes];
-      } else if (novoTipo === 'saida' && novaModalidade === 'fixa') {
-        let recorrentes = [];
-        for (let i = 0; i < 12; i++) { recorrentes.push({ id: `${Date.now()}_fixa_${i}`, descricao: `${novaDescricao} (Fixa)`, valor: valorTotal, tipo: 'saida', modalidade: 'fixa', categoria: novaCategoriaForm, dataCompra: dataBaseCompra, dataVencimento: somarMesesData(vencimentoBase, i), fixado: false, pago: false }); }
-        transacoesAtualizadas = [...recorrentes, ...transacoes];
       } else {
         const nova = { id: Date.now().toString(), descricao: novaDescricao, valor: valorTotal, tipo: novoTipo, modalidade: novoTipo === 'entrada' ? 'a_vista' : novaModalidade, categoria: novaCategoriaForm, dataCompra: dataBaseCompra, dataVencimento: vencimentoBase, fixado: false, pago: false };
         transacoesAtualizadas = [nova, ...transacoes];
@@ -375,197 +367,58 @@ function MainApp({ session }) {
   };
 
   const adicionarCategoria = () => {
-    if (!novaCategoriaNome.trim()) { Platform.OS === 'web' ? window.alert('O nome da categoria não pode ficar vazio.') : Alert.alert('Erro', 'O nome da categoria não pode ficar vazio.'); return; }
+    if (!novaCategoriaNome.trim()) { Platform.OS === 'web' ? window.alert('Nome vazio.') : Alert.alert('Erro', 'Nome vazio.'); return; }
     const nova = { id: Date.now().toString(), nome: novaCategoriaNome.trim(), cor: novaCategoriaCor };
-    const novasCategorias = [nova, ...categorias];
-    atualizarCategorias(novasCategorias);
+    atualizarCategorias([nova, ...categorias]);
     setNovaCategoriaNome('');
   };
 
+  const alternarFixar = (id) => { atualizarTransacoes(transacoes.map(t => t.id === id ? { ...t, fixado: !t.fixado } : t)); };
+  const alternarPago = (id) => { atualizarTransacoes(transacoes.map(t => t.id === id ? { ...t, pago: !t.pago } : t)); };
+  
+  const excluirTransacao = (id) => { 
+    const deletar = () => atualizarTransacoes(transacoes.filter(t => t.id !== id));
+    if (Platform.OS === 'web') { if (window.confirm("Deseja apagar este registro?")) deletar(); } else { Alert.alert("Excluir", "Apagar registro?", [{ text: "Cancelar", style: "cancel" }, { text: "Excluir", style: "destructive", onPress: deletar }]); }
+  };
+
   const excluirCategoria = (id, nome) => {
-    if (nome === 'Renda' || nome === 'Outros') { Platform.OS === 'web' ? window.alert('Esta é uma categoria do sistema e não pode ser apagada.') : Alert.alert('Aviso', 'Esta é uma categoria do sistema e não pode ser apagada.'); return; }
+    if (nome === 'Renda' || nome === 'Outros') { Platform.OS === 'web' ? window.alert('Esta é uma categoria do sistema e não pode ser apagada.') : Alert.alert('Aviso', 'Não pode apagar.'); return; }
     const deletar = () => {
       const novasCategorias = categorias.filter(c => c.id !== id);
       atualizarCategorias(novasCategorias);
       if (novaCategoriaForm === nome) setNovaCategoriaForm('Outros');
     };
-    if (Platform.OS === 'web') { if (window.confirm(`Tem certeza que deseja apagar "${nome}"?`)) { deletar(); } } 
-    else { Alert.alert('Apagar Categoria', `Tem certeza que deseja apagar "${nome}"?`, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Apagar', style: 'destructive', onPress: deletar }]); }
+    if (Platform.OS === 'web') { if (window.confirm(`Apagar "${nome}"?`)) { deletar(); } } else { Alert.alert('Apagar', `Apagar "${nome}"?`, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Apagar', style: 'destructive', onPress: deletar }]); }
   };
-
-  const excluirTransacao = (id) => { 
-    const deletar = () => atualizarTransacoes(transacoes.filter(t => t.id !== id));
-    if (Platform.OS === 'web') { if (window.confirm("Deseja apagar este registro?")) deletar(); } 
-    else { Alert.alert("Excluir", "Deseja apagar este registro?", [{ text: "Cancelar", style: "cancel" }, { text: "Excluir", style: "destructive", onPress: deletar }]); }
-  };
-
-  const alternarFixar = (id) => { atualizarTransacoes(transacoes.map(t => t.id === id ? { ...t, fixado: !t.fixado } : t)); };
-  
-  // FUNÇÃO NOVA: Mudar status para Pago/Pendente
-  const alternarPago = (id) => { atualizarTransacoes(transacoes.map(t => t.id === id ? { ...t, pago: !t.pago } : t)); };
 
   const mostrarDetalhes = (item) => {
-    let msg = `Descrição: ${item.descricao}\nCategoria: ${item.categoria}\nData Compra: ${item.dataCompra}\nVencimento: ${item.dataVencimento}\nValor: R$ ${item.valor.toFixed(2)}\nStatus: ${item.pago ? 'Paga ✅' : 'Pendente ⏳'}`;
+    let msg = `Descrição: ${item.descricao}\nCategoria: ${item.categoria}\nData Compra: ${item.dataCompra}\nVencimento: ${item.dataVencimento}\nValor: R$ ${Number(item.valor || 0).toFixed(2)}\nStatus: ${item.pago ? 'Paga ✅' : 'Pendente'}`;
     if (item.modalidade) { const rotulos = { a_vista: 'À Vista', parcelada: 'Parcelada', fixa: 'Fixa / Recorrente' }; msg += `\nTipo: ${rotulos[item.modalidade] || item.modalidade}`; }
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert("Detalhes", msg, [{ text: "Fechar", style: "default" }]);
   };
 
-  const fecharModalMeta = () => {
-    setModalNovaMetaVisivel(false);
-    setIdEditandoMeta(null);
-    setNovaMetaTitulo('');
-    setNovaMetaAlvo('');
-    setNovaMetaValorAtual('');
-    setNovaMetaCategoria('Outros');
-    setNovaMetaModalidade('a_vista');
-    setNovaMetaMeioPagamento('Pix');
-    setNovaMetaQtdParcelas('2');
-    setNovaMetaOrigemConta('Conta Corrente');
-    setNovaMetaDataAlvo('');
-    setCalendarioVisivel(false);
-  };
-
-  const abrirEdicaoMeta = (meta) => {
-    setIdEditandoMeta(meta.id);
-    setNovaMetaTitulo(meta.titulo);
-    setNovaMetaAlvo(meta.valorAlvo.toString());
-    setNovaMetaValorAtual(meta.valorAtual ? meta.valorAtual.toString() : '0');
-    setNovaMetaCategoria(meta.categoria || 'Outros');
-    setNovaMetaModalidade(meta.modalidade || 'a_vista');
-    setNovaMetaMeioPagamento(meta.meioPagamento || 'Pix');
-    setNovaMetaQtdParcelas(meta.qtdParcelas || '2');
-    setNovaMetaOrigemConta(meta.origemConta || 'Conta Corrente');
-    setNovaMetaDataAlvo(meta.dataAlvo || '');
-    setModalNovaMetaVisivel(true);
-  };
-
-  const excluirMeta = (id) => {
-    const deletar = () => atualizarMetas(metas.filter(m => m.id !== id));
-    if (Platform.OS === 'web') { if (window.confirm("Deseja apagar esta meta?")) deletar(); } 
-    else { Alert.alert("Excluir", "Deseja apagar esta meta?", [{ text: "Cancelar", style: "cancel" }, { text: "Excluir", style: "destructive", onPress: deletar }]); }
-  };
-
-  const alternarFixarMeta = (id) => {
-    atualizarMetas(metas.map(m => m.id === id ? { ...m, fixado: !m.fixado } : m));
-  };
-
-  const salvarMeta = () => {
-    if (!novaMetaTitulo || !novaMetaAlvo || !novaMetaDataAlvo) { 
-      Platform.OS === 'web' ? window.alert("Preencha o título, o valor alvo e a data planejada!") : Alert.alert("Erro", "Preencha o título, o valor alvo e a data planejada!"); 
-      return; 
-    }
-    
-    const catEncontrada = categorias.find(c => c.nome === novaMetaCategoria);
-    const corSelecionada = catEncontrada ? catEncontrada.cor : '#3B82F6';
-
-    const objMeta = {
-      titulo: novaMetaTitulo,
-      valorAlvo: parseFloat(novaMetaAlvo.replace(',', '.')),
-      categoria: novaMetaCategoria,
-      modalidade: novaMetaModalidade,
-      meioPagamento: novaMetaMeioPagamento,
-      qtdParcelas: novaMetaModalidade === 'parcelada' ? novaMetaQtdParcelas : null,
-      origemConta: novaMetaOrigemConta,
-      dataAlvo: novaMetaDataAlvo,
-      cor: corSelecionada
-    };
-
-    if (idEditandoMeta) {
-      const metasAtualizadas = metas.map(m => m.id === idEditandoMeta ? {
-        ...m,
-        ...objMeta,
-        valorAtual: parseFloat((novaMetaValorAtual || '0').replace(',', '.'))
-      } : m);
-      atualizarMetas(metasAtualizadas);
-    } else {
-      const nova = { 
-        id: Date.now().toString(), 
-        ...objMeta,
-        valorAtual: 0, 
-        fixado: false
-      };
-      atualizarMetas([nova, ...metas]);
-    }
-    fecharModalMeta();
-  };
-
-  const depositarNaMeta = () => {
-    if (!valorDeposito) return; 
-    const valorNum = parseFloat(valorDeposito.replace(',', '.'));
-    
-    const novasMetas = metas.map(m => { 
-      if (m.id === metaSelecionada.id) return { ...m, valorAtual: m.valorAtual + valorNum }; 
-      return m; 
-    });
-    atualizarMetas(novasMetas);
-
-    if (origemDeposito === 'carteira') {
-      const dataHojeFormatada = `${dataHoje.getDate().toString().padStart(2, '0')}/${(dataHoje.getMonth() + 1).toString().padStart(2, '0')}/${anoCorrente}`;
-      
-      const novaTransacao = {
-        id: Date.now().toString() + '_dep',
-        descricao: `Depósito: ${metaSelecionada.titulo}`,
-        valor: valorNum,
-        tipo: 'saida',
-        modalidade: 'a_vista',
-        categoria: metaSelecionada.categoria || 'Outros',
-        dataCompra: dataHojeFormatada,
-        dataVencimento: dataHojeFormatada,
-        fixado: false,
-        pago: true
-      };
-      atualizarTransacoes([novaTransacao, ...transacoes]);
-    }
-
-    setModalDepositarVisivel(false); 
-    setValorDeposito(''); 
-    setMetaSelecionada(null);
-    setOrigemDeposito('carteira');
-    Platform.OS === 'web' ? window.alert("Dinheiro guardado na nuvem!") : Alert.alert("Sucesso", "Dinheiro guardado na nuvem!");
-  };
-
-  const abrirDepositarMeta = (meta) => { setMetaSelecionada(meta); setOrigemDeposito('carteira'); setModalDepositarVisivel(true); };
-
-  const lerNotificacao = () => {
-    if (temNotificacao) { Platform.OS === 'web' ? window.alert("Tudo atualizado e sincronizado!") : Alert.alert("Sucesso", "Tudo sincronizado!"); setTemNotificacao(false); } 
-    else { Platform.OS === 'web' ? window.alert("Sem notificações pendentes.") : Alert.alert("Notificações", "Sem notificações."); }
-  };
-
-  const salvarEdicaoPerfil = async () => {
-    try {
-      await supabase.from('cloud_state').update({ perfil_nome: perfilNome, perfil_email: perfilEmail }).eq('user_id', userId);
-      Platform.OS === 'web' ? window.alert('Perfil atualizado na nuvem!') : Alert.alert('Sucesso', 'Perfil atualizado na nuvem!'); 
-      setModalEditarPerfilVisivel(false);
-    } catch (e) { console.log('Erro ao salvar perfil', e); }
-  }
-
-  const getTopBarTitle = () => {
-    if (abaAtual === 'dashboard') return 'Dashboard';
-    if (abaAtual === 'extrato') return 'Extrato Agrupado';
-    if (abaAtual === 'perfil') return 'Meu Perfil';
-    if (abaAtual === 'visao_anual') return 'Relatórios';
-    if (abaAtual === 'metas') return 'Minhas Metas';
-    return 'Dashboard';
-  };
-
   const renderDashboard = () => (
     <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-      <View style={styles.monthSelectorContainer}><TouchableOpacity style={styles.monthPill} onPress={abrirSeletorMes}><Text style={styles.monthPillText}>{mesAtualNome} / {anoAtual}</Text><Feather name="chevron-down" size={16} color="#1E293B" style={{ marginLeft: 5 }} /></TouchableOpacity></View>
-      
+      <View style={styles.monthSelectorContainer}>
+        <TouchableOpacity style={styles.monthPill} onPress={abrirSeletorMes}>
+          <Text style={styles.monthPillText}>{mesAtualNome} {anoAtual}</Text>
+          <Feather name="chevron-down" size={16} color="#1E293B" style={{ marginLeft: 5 }} />
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.cardsContainer}>
         <View style={[styles.summaryCard, { backgroundColor: '#F0FDF4' }]}><View><Text style={[styles.summaryLabel, { color: '#15803D' }]}>Receitas</Text><Text style={[styles.summaryValue, { color: '#15803D' }]}>R$ {receitas.toFixed(2).replace('.', ',')}</Text></View><Feather name="arrow-up-circle" size={28} color="#15803D" /></View>
         <View style={[styles.summaryCard, { backgroundColor: '#FEF2F2' }]}><View><Text style={[styles.summaryLabel, { color: '#B91C1C' }]}>Despesas (Total)</Text><Text style={[styles.summaryValue, { color: '#B91C1C' }]}>R$ {despesas.toFixed(2).replace('.', ',')}</Text></View><Feather name="arrow-down-circle" size={28} color="#B91C1C" /></View>
         <View style={[styles.summaryCard, { backgroundColor: '#EFF6FF' }]}><View><Text style={[styles.summaryLabel, { color: '#1D4ED8' }]}>Saldo do Mês</Text><Text style={[styles.summaryValue, { color: '#1D4ED8' }]}>R$ {saldo.toFixed(2).replace('.', ',')}</Text></View><Feather name="credit-card" size={28} color="#1D4ED8" /></View>
       </View>
 
-      {/* NOVO BLOCO: STATUS DE PAGAMENTO */}
       <View style={styles.statusPagamentoContainer}>
         <View style={[styles.pagamentoCard, { borderLeftColor: '#F59E0B' }]}>
-          <Text style={styles.pagamentoLabel}>A Pagar (Pendentes)</Text>
+          <Text style={styles.pagamentoLabel}>Pendentes</Text>
           <Text style={[styles.pagamentoValor, { color: '#F59E0B' }]}>R$ {despesasPendentes.toFixed(2)}</Text>
         </View>
         <View style={[styles.pagamentoCard, { borderLeftColor: '#10B981' }]}>
-          <Text style={styles.pagamentoLabel}>Contas Pagas</Text>
+          <Text style={styles.pagamentoLabel}>Pagas</Text>
           <Text style={[styles.pagamentoValor, { color: '#10B981' }]}>R$ {despesasPagas.toFixed(2)}</Text>
         </View>
       </View>
@@ -584,8 +437,8 @@ function MainApp({ session }) {
           {despesasAgrupadas.length === 0 ? (<Text style={styles.textoVazio}>Sem gastos pendentes.</Text>) : (
             despesasAgrupadas.map((item, index) => { 
               const catObj = categorias.find(c => c.nome === item.nome); 
-              const cor = catObj ? catObj.cor : '#94A3B8';
-              const percCatSafe = isNaN(item.porcentagem) || !isFinite(item.porcentagem) ? 0 : item.porcentagem; 
+              const cor = catObj && catObj.cor ? String(catObj.cor) : '#94A3B8'; 
+              const percSafe = isNaN(item.porcentagem) ? 0 : item.porcentagem;
               return (
                 <View key={index} style={styles.catRow}>
                   <View style={styles.catLeft}>
@@ -593,8 +446,8 @@ function MainApp({ session }) {
                     <Text style={styles.catNome}>{item.nome}</Text>
                   </View>
                   <View style={styles.catRight}>
-                    <Text style={styles.catValor}>R$ {item.total.toFixed(2)}</Text>
-                    <Text style={styles.catPercent}>{percCatSafe.toFixed(0)}%</Text>
+                    <Text style={styles.catValor}>R$ {Number(item.total || 0).toFixed(2)}</Text>
+                    <Text style={styles.catPercent}>{percSafe.toFixed(0)}%</Text>
                   </View>
                 </View>
               ) 
@@ -609,19 +462,18 @@ function MainApp({ session }) {
   const renderExtrato = () => {
     let mapaGrupos = {};
     transacoesOrdenadasDoMes.forEach(t => {
-      // Regra de Ouro: Contas pagas formam um grupo próprio isolado.
-      let nomeGrupo = t.pago ? '✅ PAGOS / CONCLUÍDOS' : t.categoria;
+      let nomeGrupo = t.pago ? '✅ PAGOS / CONCLUÍDOS' : String(t.categoria || 'Outros');
       if (!mapaGrupos[nomeGrupo]) { 
         const catObj = categorias.find(c => c.nome === t.categoria); 
-        const corGrupo = t.pago ? '#10B981' : (catObj ? catObj.cor : '#94A3B8');
+        const corHex = catObj && catObj.cor ? String(catObj.cor) : '#94A3B8';
+        const corGrupo = t.pago ? '#10B981' : corHex;
         mapaGrupos[nomeGrupo] = { nome: nomeGrupo, cor: corGrupo, transacoes: [], totalEntrada: 0, totalSaida: 0, isPago: t.pago }; 
       }
       mapaGrupos[nomeGrupo].transacoes.push(t);
-      if (t.tipo === 'entrada') mapaGrupos[nomeGrupo].totalEntrada += t.valor; else mapaGrupos[nomeGrupo].totalSaida += t.valor;
+      if (t.tipo === 'entrada') mapaGrupos[nomeGrupo].totalEntrada += Number(t.valor || 0); else mapaGrupos[nomeGrupo].totalSaida += Number(t.valor || 0);
     });
 
     const gruposArray = Object.values(mapaGrupos).sort((a,b) => {
-      // Obriga a aba de Pagos a ficar sempre no final da tela
       if (a.isPago && !b.isPago) return 1;
       if (!a.isPago && b.isPago) return -1;
       return (b.totalSaida + b.totalEntrada) - (a.totalSaida + a.totalEntrada);
@@ -641,15 +493,13 @@ function MainApp({ session }) {
           </View>
           <View style={{ alignItems: 'flex-end', flexDirection: 'row' }}>
             <Text style={[styles.listCardValue, item.tipo === 'entrada' ? styles.verde : styles.vermelho, { marginRight: 12 }, item.pago && { color: '#94A3B8' }]}>
-              {item.tipo === 'entrada' ? '+ ' : '- '}R$ {item.valor.toFixed(2)}
+              {item.tipo === 'entrada' ? '+ ' : '- '}R$ {Number(item.valor || 0).toFixed(2)}
             </Text>
             {Platform.OS === 'web' && (
               <View style={{ flexDirection: 'row', gap: 6 }}>
-                {/* BOTÃO NOVO DE DAR BAIXA (WEB) */}
                 <TouchableOpacity onPress={() => alternarPago(item.id)} style={{ padding: 6, backgroundColor: item.pago ? '#D1FAE5' : '#F1F5F9', borderRadius: 6 }}>
                   <Feather name="check" size={14} color={item.pago ? '#10B981' : '#94A3B8'} />
                 </TouchableOpacity>
-
                 <TouchableOpacity onPress={() => alternarFixar(item.id)} style={{ padding: 6, backgroundColor: '#EFF6FF', borderRadius: 6 }}>
                   <Feather name="bookmark" size={14} color="#3B82F6" />
                 </TouchableOpacity>
@@ -668,8 +518,6 @@ function MainApp({ session }) {
       if (Platform.OS === 'web') return <View key={item.id} style={styles.cardContainerGrouped}>{cardConteudo}</View>;
 
       const renderRight = () => (<View style={styles.rightActions}><TouchableOpacity style={styles.btnEditar} onPress={() => abrirEdicao(item)}><Text style={styles.textoAcao}>✏️</Text></TouchableOpacity><TouchableOpacity style={styles.btnExcluir} onPress={() => excluirTransacao(item.id)}><Text style={styles.textoAcao}>🗑️</Text></TouchableOpacity></View>);
-      
-      // BOTÃO DE DAR BAIXA AO DESLIZAR (MOBILE)
       const renderLeft = () => (<View style={styles.leftActions}><TouchableOpacity style={[styles.btnFixar, {backgroundColor: '#10B981'}]} onPress={() => alternarPago(item.id)}><Text style={styles.textoAcao}>{item.pago ? 'Desmarcar' : '✅ Pagar'}</Text></TouchableOpacity></View>);
 
       return (
@@ -682,7 +530,10 @@ function MainApp({ session }) {
     return (
       <ScrollView style={styles.extratoContainer} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         <View style={styles.extratoHeader}>
-          <View><Text style={styles.extratoTitle}>Extrato Agrupado</Text><Text style={styles.extratoSubtitle}>Lançamentos de {mesAtualNome}</Text></View>
+          <View><Text style={styles.extratoTitle}>Extrato Agrupado</Text><Text style={styles.extratoSubtitle}>Movimentações organizadas</Text></View>
+          <TouchableOpacity style={styles.btnExportar} onPress={() => Platform.OS === 'web' ? window.alert('Gerando PDF...') : Alert.alert('Exportar Extrato', `Gerando PDF...`)}>
+            <Feather name="file-text" size={18} color="#FFF" /><Text style={styles.btnExportarText}>Gerar PDF</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.extratoMonthSelector}>
           <TouchableOpacity style={styles.monthPill} onPress={abrirSeletorMes}>
@@ -720,110 +571,6 @@ function MainApp({ session }) {
     );
   };
 
-  const renderVisaoAnual = () => {
-    const dados = gerarDadosAnuais(anoVisaoAnual); const totalReceitasAno = dados.reduce((acc, curr) => acc + curr.receitas, 0); const totalDespesasAno = dados.reduce((acc, curr) => acc + curr.despesas, 0); const saldoAno = totalReceitasAno - totalDespesasAno; const maxValorGrafico = Math.max(...dados.map(d => Math.max(d.receitas, d.despesas)), 1);
-    return (<View style={styles.extratoContainer}><View style={styles.extratoHeader}><View><Text style={styles.extratoTitle}>Visão Anual</Text><Text style={styles.extratoSubtitle}>Evolução financeira em {anoVisaoAnual}</Text></View></View><View style={styles.extratoMonthSelector}><View style={{ flexDirection: 'row', alignItems: 'center' }}><TouchableOpacity style={{ padding: 10 }} onPress={() => setAnoVisaoAnual(anoVisaoAnual - 1)}><Feather name="chevron-left" size={24} color="#1E293B" /></TouchableOpacity><Text style={{ fontSize: 20, fontWeight: 'bold', marginHorizontal: 15, color: '#1E293B' }}>{anoVisaoAnual}</Text><TouchableOpacity style={{ padding: 10 }} onPress={() => setAnoVisaoAnual(anoVisaoAnual + 1)}><Feather name="chevron-right" size={24} color="#1E293B" /></TouchableOpacity></View></View><View style={styles.extratoResumoBoxes}><View style={styles.extratoResumoItem}><Text style={styles.extratoResumoLabel}>Entradas Anuais</Text><Text style={[styles.extratoResumoValor, styles.verde]}>R$ {totalReceitasAno.toFixed(0)}</Text></View><View style={styles.extratoResumoItem}><Text style={styles.extratoResumoLabel}>Saídas Anuais</Text><Text style={[styles.extratoResumoValor, styles.vermelho]}>R$ {totalDespesasAno.toFixed(0)}</Text></View></View><View style={{ paddingHorizontal: 20, marginBottom: 15 }}><Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 5 }}>Balanço do Ano</Text><Text style={{ fontSize: 14, color: saldoAno >= 0 ? '#15803D' : '#B91C1C' }}>{saldoAno >= 0 ? 'Você economizou ' : 'Você gastou a mais '}R$ {Math.abs(saldoAno).toFixed(2)}</Text></View><View style={styles.graficoAnualContainer}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end', height: 220 }}>{dados.map((item, index) => { const heightRec = maxValorGrafico > 0 ? (item.receitas / maxValorGrafico) * 150 : 0; const heightDesp = maxValorGrafico > 0 ? (item.despesas / maxValorGrafico) * 150 : 0; const hR = isNaN(heightRec) || !isFinite(heightRec) ? 0 : heightRec; const hD = isNaN(heightDesp) || !isFinite(heightDesp) ? 0 : heightDesp; return (<View key={index} style={styles.graficoMesColuna}><View style={styles.graficoBarrasContainer}><View style={[styles.graficoBarra, styles.bgVerde, { height: hR > 0 ? hR : 4 }]} /><View style={[styles.graficoBarra, styles.bgVermelho, { height: hD > 0 ? hD : 4 }]} /></View><Text style={styles.graficoMesLabel}>{item.mes}</Text></View>); })}</ScrollView></View><View style={styles.graficoLegenda}><View style={{flexDirection: 'row', alignItems: 'center', marginRight: 20}}><View style={[styles.catBolinha, styles.bgVerde]} /><Text style={{fontSize: 12, color: '#64748B'}}>Receitas</Text></View><View style={{flexDirection: 'row', alignItems: 'center'}}><View style={[styles.catBolinha, styles.bgVermelho]} /><Text style={{fontSize: 12, color: '#64748B'}}>Despesas</Text></View></View></View>);
-  };
-
-  const renderMetas = () => {
-    const totalGuardadoGeral = metas.reduce((acc, m) => acc + (m.valorAtual || 0), 0);
-    const metasOrdenadas = [...metas].sort((a, b) => {
-      if (a.fixado && !b.fixado) return -1;
-      if (!a.fixado && b.fixado) return 1;
-      return 0;
-    });
-
-    const renderCardMetaConteudo = (meta, porcentagem) => (
-      <View style={[styles.metaCard, meta.fixado && styles.cardFixado]}>
-        <View style={styles.metaCardHeader}>
-          <View style={{flexDirection: 'row', alignItems: 'center'}}>
-            {meta.fixado && <Text style={{ marginRight: 5 }}>📌</Text>}
-            <View style={{width: 14, height: 14, borderRadius: 7, backgroundColor: meta.cor, marginRight: 8}} />
-            <Text style={styles.metaCardTitle}>{meta.titulo}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[styles.metaCardPercent, {color: meta.cor, marginRight: Platform.OS === 'web' ? 10 : 0}]}>{porcentagem.toFixed(0)}%</Text>
-            {Platform.OS === 'web' && (
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                <TouchableOpacity onPress={() => alternarFixarMeta(meta.id)} style={{ padding: 6, backgroundColor: '#EFF6FF', borderRadius: 6 }}>
-                  <Feather name="bookmark" size={14} color="#3B82F6" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => abrirEdicaoMeta(meta)} style={{ padding: 6, backgroundColor: '#FEF3C7', borderRadius: 6 }}>
-                  <Feather name="edit-2" size={14} color="#D97706" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => excluirMeta(meta.id)} style={{ padding: 6, backgroundColor: '#FEE2E2', borderRadius: 6 }}>
-                  <Feather name="trash-2" size={14} color="#DC2626" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-        
-        <View style={styles.metaTagsRow}>
-          <Text style={styles.metaTag}>{meta.categoria || 'Sem categoria'}</Text>
-          {meta.dataAlvo && <Text style={styles.metaTagCalendario}>📅 {meta.dataAlvo}</Text>}
-          <Text style={styles.metaTagPagamento}>{meta.origemConta || 'Conta'}</Text>
-          <Text style={styles.metaTag}>{meta.modalidade === 'parcelada' ? `Parcelado (${meta.qtdParcelas}x)` : 'À Vista'}</Text>
-          <Text style={styles.metaTag}>{meta.meioPagamento || 'Não definido'}</Text>
-        </View>
-
-        <View style={styles.metaValores}>
-          <Text style={styles.metaValorAtual}>R$ {(meta.valorAtual || 0).toFixed(2)}</Text>
-          <Text style={styles.metaValorAlvo}>de R$ {(meta.valorAlvo || 0).toFixed(2)}</Text>
-        </View>
-        <View style={styles.metaBarraFundo}>
-          <View style={[styles.metaBarraProgresso, { width: `${isNaN(porcentagem) || !isFinite(porcentagem) ? 0 : porcentagem}%`, backgroundColor: meta.cor }]} />
-        </View>
-        <View style={styles.metaAcoes}>
-          <TouchableOpacity style={styles.btnDepositarMeta} onPress={() => abrirDepositarMeta(meta)}>
-            <Text style={styles.btnDepositarMetaTexto}>Guardar Dinheiro</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-
-    return (
-      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        <View style={styles.metasHeader}>
-          <Text style={styles.metasHeaderLabel}>Total Guardado</Text>
-          <Text style={styles.metasHeaderValor}>R$ {totalGuardadoGeral.toFixed(2)}</Text>
-          <TouchableOpacity style={styles.btnNovaMeta} onPress={() => setModalNovaMetaVisivel(true)}>
-            <Feather name="plus-circle" size={20} color="#FFF" />
-            <Text style={styles.btnNovaMetaTexto}>Criar Nova Meta</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {metasOrdenadas.map((meta) => { 
-          const porcentagem = Math.min(((meta.valorAtual || 0) / (meta.valorAlvo || 1)) * 100, 100); 
-
-          if (Platform.OS === 'web') {
-            return (
-              <View key={meta.id} style={styles.metaCardWrapper}>
-                {renderCardMetaConteudo(meta, porcentagem)}
-              </View>
-            );
-          }
-
-          const renderRightMeta = () => (<View style={styles.rightActions}><TouchableOpacity style={styles.btnEditar} onPress={() => abrirEdicaoMeta(meta)}><Text style={styles.textoAcao}>✏️</Text></TouchableOpacity><TouchableOpacity style={styles.btnExcluir} onPress={() => excluirMeta(meta.id)}><Text style={styles.textoAcao}>🗑️</Text></TouchableOpacity></View>);
-          const renderLeftMeta = () => (<View style={styles.leftActions}><TouchableOpacity style={styles.btnFixar} onPress={() => alternarFixarMeta(meta.id)}><Text style={styles.textoAcao}>{meta.fixado ? 'Desfixar' : '📌 Fixar'}</Text></TouchableOpacity></View>);
-
-          return (
-            <View key={meta.id} style={styles.metaCardWrapper}>
-              <Swipeable renderRightActions={renderRightMeta} renderLeftActions={renderLeftMeta} containerStyle={styles.swipeable}>
-                {renderCardMetaConteudo(meta, porcentagem)}
-              </Swipeable>
-            </View>
-          ); 
-        })}
-        <View style={{height: 120}} />
-      </ScrollView>
-    );
-  };
-
-  const renderPerfil = () => (
-    <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}><View style={styles.perfilHeader}><View style={styles.perfilAvatarGiga}><Feather name="user" size={45} color="#FFF" /></View><Text style={styles.perfilNomeGiga}>{perfilNome}</Text><Text style={styles.perfilEmailGiga}>{perfilEmail}</Text></View><View style={styles.perfilSectionContainer}><Text style={styles.perfilSectionTitle}>Minha Conta</Text><TouchableOpacity style={styles.perfilOpcaoBtn} onPress={() => setModalEditarPerfilVisivel(true)}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#EFF6FF' }]}><Feather name="edit-2" size={20} color="#3B82F6" /></View><Text style={styles.perfilOpcaoTexto}>Editar Perfil</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn} onPress={() => setModalSegurancaVisivel(true)}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#FEF2F2' }]}><Feather name="shield" size={20} color="#EF4444" /></View><Text style={styles.perfilOpcaoTexto}>Segurança e Senhas</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F0FDF4' }]}><Feather name="credit-card" size={20} color="#10B981" /></View><Text style={styles.perfilOpcaoTexto}>Assinatura (Premium)</Text></View><Text style={styles.perfilTagFree}>Plano Grátis</Text></TouchableOpacity></View><View style={styles.perfilSectionContainer}><Text style={styles.perfilSectionTitle}>Aplicativo</Text><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F1F5F9' }]}><Feather name="moon" size={20} color="#64748B" /></View><Text style={styles.perfilOpcaoTexto}>Modo Escuro</Text></View><Feather name="toggle-left" size={24} color="#CBD5E1" /></TouchableOpacity><TouchableOpacity style={styles.perfilOpcaoBtn}><View style={styles.perfilOpcaoLeft}><View style={[styles.perfilIconBox, { backgroundColor: '#F1F5F9' }]}><Feather name="help-circle" size={20} color="#64748B" /></View><Text style={styles.perfilOpcaoTexto}>Central de Ajuda</Text></View><Feather name="chevron-right" size={20} color="#CBD5E1" /></TouchableOpacity></View><TouchableOpacity style={styles.btnSair} onPress={async () => { await supabase.auth.signOut(); }}><Feather name="log-out" size={20} color="#EF4444" /><Text style={styles.btnSairTexto}>Sair do Aplicativo</Text></TouchableOpacity><View style={{height: 100}} /></ScrollView>
-  );
-
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaView style={styles.container}>
@@ -831,26 +578,20 @@ function MainApp({ session }) {
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => setMenuAberto(true)} style={styles.topBarIcon}><Feather name="menu" size={28} color="#1E293B" /></TouchableOpacity>
           <Text style={styles.topBarTitle}>{getTopBarTitle()}</Text>
-          <TouchableOpacity onPress={lerNotificacao} style={styles.topBarIcon}>
-            <View><Feather name="bell" size={24} color="#1E293B" />{temNotificacao && <View style={styles.notificationBadge} />}</View>
+          <TouchableOpacity style={styles.topBarIcon}>
+            <View><Feather name="bell" size={24} color="#1E293B" /></View>
           </TouchableOpacity>
         </View>
 
         {abaAtual === 'dashboard' && renderDashboard()}
         {abaAtual === 'extrato' && renderExtrato()}
-        {abaAtual === 'perfil' && renderPerfil()}
-        {abaAtual === 'visao_anual' && renderVisaoAnual()}
-        {abaAtual === 'metas' && renderMetas()}
 
-        {/* NOVA BARRA INFERIOR - COMPORTAMENTO REAJUSTADO */}
         <View style={styles.bottomNav}>
           <TouchableOpacity style={styles.navItem} onPress={() => setAbaAtual('dashboard')}><Feather name="home" size={24} color={abaAtual === 'dashboard' ? '#3B82F6' : '#94A3B8'} /><Text style={[styles.navText, abaAtual === 'dashboard' && styles.navTextAtivo]}>Início</Text></TouchableOpacity>
           <TouchableOpacity style={styles.navItem} onPress={() => setAbaAtual('extrato')}><Feather name="list" size={24} color={abaAtual === 'extrato' ? '#3B82F6' : '#94A3B8'} /><Text style={[styles.navText, abaAtual === 'extrato' && styles.navTextAtivo]}>Extrato</Text></TouchableOpacity>
-          
           <View style={styles.fabWrapper}><TouchableOpacity style={styles.fabBtn} onPress={() => setMenuAdicionarVisivel(true)}><Feather name="plus" size={32} color="#FFF" /></TouchableOpacity></View>
-          
-          <TouchableOpacity style={styles.navItem} onPress={() => setAbaAtual('metas')}><Feather name="target" size={24} color={abaAtual === 'metas' ? '#3B82F6' : '#94A3B8'} /><Text style={[styles.navText, abaAtual === 'metas' && styles.navTextAtivo]}>Metas</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => setAbaAtual('perfil')}><Feather name="user" size={24} color={abaAtual === 'perfil' ? '#3B82F6' : '#94A3B8'} /><Text style={[styles.navText, abaAtual === 'perfil' && styles.navTextAtivo]}>Perfil</Text></TouchableOpacity>
+          <View style={styles.navItem}></View>
+          <View style={styles.navItem}></View>
         </View>
 
         <Modal animationType="slide" transparent={true} visible={modalVisivel} onRequestClose={fecharModal}>
@@ -899,7 +640,7 @@ function MainApp({ session }) {
 
                 {novoTipo === 'saida' ? (
                   novaModalidade === 'fixa' ? (
-                    <View style={styles.avisoFixaContainer}><Text style={styles.avisoFixaTexto}>💡 A despesa começará automaticamente em {nomesMeses[mesSelecionado.split('/')[0]]}/{mesSelecionado.split('/')[1]}</Text></View>
+                    <View style={styles.avisoFixaContainer}><Text style={styles.avisoFixaTexto}>💡 A despesa começará automaticamente em {nomesMeses[String(mesSelecionado || '').split('/')[0]]}/{String(mesSelecionado || '').split('/')[1]}</Text></View>
                   ) : (
                     <View style={styles.linhaDupla}>
                       <View style={styles.metadeInput}>
@@ -926,7 +667,10 @@ function MainApp({ session }) {
           </KeyboardAvoidingView>
         </Modal>
 
-        {calendarioVisivel && (
+        {/* ========================================================================= */}
+        {/* SOLUÇÃO DEFINITIVA: CALENDÁRIO TRANSFORMADO EM MODAL PARA SOBREPOSIÇÃO */}
+        {/* ========================================================================= */}
+        <Modal visible={calendarioVisivel} transparent={true} animationType="fade" onRequestClose={() => setCalendarioVisivel(false)}>
           <View style={styles.calendarioOverlay}>
             <View style={styles.calendarioBox}>
               <View style={styles.calTopo}>
@@ -939,9 +683,8 @@ function MainApp({ session }) {
               <TouchableOpacity style={styles.btnFecharCal} onPress={() => setCalendarioVisivel(false)}><Text style={styles.textoFecharCal}>Cancelar</Text></TouchableOpacity>
             </View>
           </View>
-        )}
+        </Modal>
 
-        {/* MENU LATERAL COM TAGS E IMPORTAR RESTAURADOS */}
         <Modal visible={menuAberto} transparent={true} animationType="fade" onRequestClose={() => setMenuAberto(false)}>
           <View style={styles.drawerOverlay}>
             <View style={styles.drawerContent}>
@@ -980,9 +723,14 @@ function MainApp({ session }) {
         <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}>
             <View style={styles.modalConteudo}>
-              <View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Importador Inteligente</Text><TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View>
+              <View style={styles.modalCabecalho}>
+                <Text style={styles.modalTitulo}>Importador CSV</Text>
+                <TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity>
+              </View>
               <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top' }]} multiline={true} placeholder="Data da Compra ; Descrição ; Parcela (01/02) ; Valor Parcela ; Valor Total" value={conteudoCsvInput} onChangeText={setConteudoCsvInput} />
-              <TouchableOpacity style={styles.botaoSalvar} onPress={() => processarTextoCsv(conteudoCsvInput)}><Text style={styles.textoBotaoSalvar}>Processar Faturas</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.botaoSalvar} onPress={() => processarTextoCsv(conteudoCsvInput)}>
+                <Text style={styles.textoBotaoSalvar}>Processar Faturas</Text>
+              </TouchableOpacity>
               {transacoesPreview.length > 0 && (
                 <View style={{ marginTop: 15, flex: 1 }}>
                   <ScrollView style={{ maxHeight: 180, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 10 }}>
@@ -1000,55 +748,33 @@ function MainApp({ session }) {
           </KeyboardAvoidingView>
         </Modal>
 
-        <Modal animationType="slide" transparent={true} visible={modalImportarVisivel} onRequestClose={() => setModalImportarVisivel(false)}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundoBottomSheet}>
-        <View style={[styles.modalConteudoBottomSheet, { maxHeight: '90%' }]}>
-          <View style={styles.dragHandle} />
-          <View style={styles.modalCabecalho}>
-            <Text style={styles.modalTitulo}>Importador CSV</Text>
-            <TouchableOpacity onPress={() => setModalImportarVisivel(false)}><Feather name="x-circle" size={24} color="#64748B" /></TouchableOpacity>
-          </View>
-          <TextInput style={[styles.inputClean, { height: 120, textAlignVertical: 'top', fontSize: 13 }]} multiline={true} placeholder="Data da Compra ; Descrição ; Parcela (01/02) ; Valor Parcela ; Valor Total" value={conteudoCsvInput} onChangeText={setConteudoCsvInput} />
-          <TouchableOpacity style={[styles.botaoSalvarGrande, { backgroundColor: '#10B981', marginTop: 10 }]} onPress={() => processarTextoCsv(conteudoCsvInput)}>
-            <Text style={styles.textoBotaoSalvarGrande}>Processar Ciclo de Parcelas</Text>
-          </TouchableOpacity>
-          {transacoesPreview.length > 0 && (
-            <View style={{ marginTop: 15, flex: 1 }}>
-              <Text style={[styles.label, { color: '#10B981', fontWeight: 'bold' }]}>Prévia Inteligente ({transacoesPreview.length} parcelas):</Text>
-              <ScrollView style={{ maxHeight: 180, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 10 }}>
-                {transacoesPreview.map((item, i) => (
-                  <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
-                    <View style={{ flex: 1 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E293B' }}>{item.descricao}</Text><Text style={{ fontSize: 11, color: '#64748B' }}>📅 Venc: {item.dataVencimento}</Text></View>
-                    <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: item.tipo === 'entrada' ? '#15803D' : '#B91C1C' }}>- R$ {item.valor.toFixed(2)}</Text></View>
-                  </View>
-                ))}
+        <Modal animationType="slide" transparent={true} visible={modalCategoriasVisivel} onRequestClose={() => setModalCategoriasVisivel(false)}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalFundo}>
+            <View style={styles.modalConteudo}>
+              <View style={styles.modalCabecalho}><Text style={styles.modalTitulo}>Gerenciar Tags</Text><TouchableOpacity onPress={() => setModalCategoriasVisivel(false)}><Text style={styles.modalFechar}>X</Text></TouchableOpacity></View>
+              <Text style={styles.labelPequeno}>Nova Tag:</Text>
+              <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15}}>
+                <TextInput style={[styles.input, {flex: 1, marginRight: 10}]} placeholder="Ex: Viagem" value={novaCategoriaNome} onChangeText={setNovaCategoriaNome} />
+                <TouchableOpacity style={styles.btnAdicionarCategoria} onPress={adicionarCategoria}><Feather name="plus" size={20} color="#FFF" /></TouchableOpacity>
+              </View>
+              <Text style={styles.labelPequeno}>Cor Principal:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
+                {coresDisponiveis.map(cor => (<TouchableOpacity key={cor} style={[styles.bolinhaCor, {backgroundColor: cor}, novaCategoriaCor === cor && styles.bolinhaCorAtiva]} onPress={() => setNovaCategoriaCor(cor)} />))}
               </ScrollView>
-              <TouchableOpacity style={[styles.botaoSalvarGrande, { marginTop: 15 }]} onPress={confirmarImportacaoLote}><Text style={styles.textoBotaoSalvarGrande}>Confirmar e Inserir no Extrato</Text></TouchableOpacity>
+              <Text style={styles.labelPequeno}>Tags Existentes:</Text>
+              <FlatList data={categorias} keyExtractor={item => item.id} style={{maxHeight: 250}} renderItem={({item}) => (
+                <View style={styles.catEditRow}>
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}><View style={{width: 12, height: 12, borderRadius: 6, backgroundColor: item.cor, marginRight: 10}} /><Text style={styles.catEditNome}>{item.nome}</Text></View>
+                  <TouchableOpacity onPress={() => excluirCategoria(item.id, item.nome)} style={{padding: 5}}><Feather name="trash-2" size={20} color="#EF4444" /></TouchableOpacity>
+                </View>
+              )} />
             </View>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+          </KeyboardAvoidingView>
+        </Modal>
 
-    {/* CALENDÁRIO MOVIDO PARA O FINAL PARA FICAR SEMPRE À FRENTE */}
-    {calendarioVisivel && (
-      <View style={styles.calendarioOverlay}>
-        <View style={styles.calendarioBox}>
-          <View style={styles.calTopo}>
-            <TouchableOpacity onPress={() => setCalMes(calMes === 1 ? 12 : calMes - 1)}><Text style={styles.calSeta}>{'<'}</Text></TouchableOpacity>
-            <Text style={styles.calTitulo}>{nomesMeses[calMes.toString().padStart(2, '0')]} {calAno}</Text>
-            <TouchableOpacity onPress={() => setCalMes(calMes === 12 ? 1 : calMes + 1)}><Text style={styles.calSeta}>{'>'}</Text></TouchableOpacity>
-          </View>
-          <View style={styles.gridDiasSemana}>{arrayDiasSemana.map(d => <Text key={d} style={styles.diaSemanaTexto}>{d}</Text>)}</View>
-          <View style={styles.gridDias}>{arrayDiasCompletos.map((diaItem, idx) => {if (typeof diaItem === 'string') return <View key={idx} style={styles.diaItem} />;return <TouchableOpacity key={idx} style={styles.diaItem} onPress={() => selecionarDia(diaItem)}><Text style={styles.diaTexto}>{diaItem}</Text></TouchableOpacity>})}</View>
-          <TouchableOpacity style={styles.btnFecharCal} onPress={() => setCalendarioVisivel(false)}><Text style={styles.textoFecharCal}>Cancelar</Text></TouchableOpacity>
-        </View>
-      </View>
-    )}
-
-  </SafeAreaView>
-</GestureHandlerRootView>
-);
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -1058,6 +784,13 @@ const styles = StyleSheet.create({
   topBarTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B' },
   topBarIcon: { padding: 5 },
   notificationBadge: { position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#EF4444', borderWidth: 2, borderColor: '#FFFFFF' },
+  
+  // STATUS CONTAS PAGAS
+  statusPagamentoContainer: { flexDirection: 'row', paddingHorizontal: 20, gap: 12, marginBottom: 25 },
+  pagamentoCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 15, borderRadius: 12, borderLeftWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  pagamentoLabel: { fontSize: 12, color: '#64748B', fontWeight: '600', marginBottom: 4 },
+  pagamentoValor: { fontSize: 16, fontWeight: 'bold' },
+
   metaTagsRow: { flexDirection: 'row', marginBottom: 12, flexWrap: 'wrap' },
   metaTag: { backgroundColor: '#F1F5F9', color: '#64748B', fontSize: 11, fontWeight: 'bold', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginRight: 6, marginBottom: 4 },
   metaTagCalendario: { backgroundColor: '#FEF2F2', color: '#EF4444', fontSize: 11, fontWeight: 'bold', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginRight: 6, marginBottom: 4 },
@@ -1074,7 +807,8 @@ const styles = StyleSheet.create({
   grupoConteudo: { backgroundColor: '#FAFAFA', borderTopWidth: 1, borderTopColor: '#F1F5F9', padding: 10 },
   cardContainerGrouped: { marginBottom: 8 },
   listCardGrouped: { backgroundColor: '#FFFFFF', padding: 15, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1 },
-  calendarioOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 9999 },  metasHeader: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginHorizontal: 20, marginTop: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  
+  metasHeader: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginHorizontal: 20, marginTop: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   metasHeaderLabel: { fontSize: 14, color: '#64748B', fontWeight: '600' },
   metasHeaderValor: { fontSize: 32, fontWeight: 'bold', color: '#10B981', marginVertical: 5 },
   btnNovaMeta: { backgroundColor: '#3B82F6', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, marginTop: 10, flexDirection: 'row', alignItems: 'center' },
@@ -1159,6 +893,11 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 22, fontWeight: 'bold' },
   visaoGeralSection: { paddingHorizontal: 20, marginBottom: 25 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 15 },
+  gridContainer: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' },
+  gridItem: { width: '22%', alignItems: 'center' },
+  iconBox: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  gridValue: { fontSize: 12, fontWeight: 'bold', color: '#1E293B', textAlign: 'center' },
+  gridLabel: { fontSize: 10, color: '#64748B', textAlign: 'center', marginTop: 2 },
   chartSection: { paddingHorizontal: 20, paddingBottom: 10 },
   chartBox: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   chartLabel: { fontSize: 14, color: '#64748B', marginBottom: 15, textAlign: 'center' },
@@ -1185,6 +924,7 @@ const styles = StyleSheet.create({
   cardFixado: { borderLeftWidth: 4, borderLeftColor: '#3B82F6' },
   listCardInfo: { flex: 1 },
   listCardTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
+  listCardCategory: { fontSize: 13, color: '#64748B', marginTop: 4 },
   listCardValue: { fontSize: 16, fontWeight: 'bold' },
   dataVencimentoText: { fontSize: 11, color: '#94A3B8', marginTop: 4 },
   verde: { color: '#15803D' },
@@ -1225,7 +965,9 @@ const styles = StyleSheet.create({
   inputDataTexto: { fontSize: 14, color: '#1E293B', fontWeight: '500' },
   botaoSalvar: { backgroundColor: '#3B82F6', paddingVertical: 15, borderRadius: 15, alignItems: 'center', marginTop: 25, marginBottom: 20 },
   textoBotaoSalvar: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  modalFundoCentro: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center' },
+  
+  // MODAL CALENDARIO (Z-INDEX ALTO)
+  calendarioOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 9999 },
   calendarioBox: { width: '85%', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, alignItems: 'center' },
   calTopo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10 },
   calSeta: { fontSize: 22, fontWeight: 'bold', color: '#3B82F6', paddingHorizontal: 10 },
@@ -1235,13 +977,15 @@ const styles = StyleSheet.create({
   diaTexto: { fontSize: 14, color: '#1E293B', fontWeight: '500' },
   btnFecharCal: { marginTop: 15, paddingVertical: 8, paddingHorizontal: 20, backgroundColor: '#F1F5F9', borderRadius: 10 },
   textoFecharCal: { color: '#64748B', fontWeight: 'bold', fontSize: 13 },
-  
-  statusPagamentoContainer: { flexDirection: 'row', paddingHorizontal: 20, gap: 12, marginBottom: 25 },
-  pagamentoCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 15, borderRadius: 12, borderLeftWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  pagamentoLabel: { fontSize: 12, color: '#64748B', fontWeight: '600', marginBottom: 4 },
-  pagamentoValor: { fontSize: 16, fontWeight: 'bold' },
   gridDiasSemana: { flexDirection: 'row', width: '100%', marginBottom: 10 },
-  diaSemanaTexto: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', color: '#64748B' }
+  diaSemanaTexto: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', color: '#64748B' },
+
+  modalFundoCentro: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center' },
+  gridMeses: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', width: '100%', marginTop: 15 },
+  mesItem: { width: '30%', paddingVertical: 12, alignItems: 'center', borderRadius: 10, marginBottom: 10, backgroundColor: '#F1F5F9' },
+  mesItemAtivo: { backgroundColor: '#3B82F6' },
+  mesItemTexto: { fontSize: 14, color: '#1E293B', fontWeight: '600' },
+  mesItemTextoAtivo: { color: '#FFF', fontWeight: 'bold' }
 });
 
 export default function App() {
